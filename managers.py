@@ -156,6 +156,18 @@ class ConfigManager:
         with open(self.config_path, 'w', encoding='utf-8') as f:
             self.config.write(f)
 
+    def get_network_mode(self):
+        self.config.read(self.config_path, encoding='utf-8')
+        return self.config.get('General', 'NetworkMode', fallback='Online')
+
+    def set_network_mode(self, mode):
+        if 'General' not in self.config:
+            self.config['General'] = {}
+        self.config['General']['NetworkMode'] = mode
+        self.config['General']['ConfigUpdatedAt'] = str(datetime.now().timestamp())
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            self.config.write(f)
+
     def get_start_mode(self):
         self.config.read(self.config_path, encoding='utf-8')
         return self.config.get('General', 'StartMode', fallback='Sync')
@@ -522,6 +534,10 @@ class DatabaseManagerBase:
         if not pymysql:
             logger.warning("pymysql not installed, skipping MySQL init")
             return
+            
+        if self.config_manager.get_network_mode() == 'Offline':
+            logger.info("Network mode is Offline, skipping MySQL init")
+            return
 
         config = self.config_manager.get_mysql_config()
         try:
@@ -530,7 +546,8 @@ class DatabaseManagerBase:
                 host=config['host'],
                 user=config['user'],
                 password=config['password'],
-                port=config['port']
+                port=config['port'],
+                connect_timeout=3
             )
             cursor = conn.cursor()
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS {config['database']}")
@@ -676,6 +693,9 @@ class DatabaseManagerBase:
     def get_mysql_connection(self):
         if not pymysql:
             return None
+        if self.config_manager.get_network_mode() == 'Offline':
+            return None
+            
         config = self.config_manager.get_mysql_config()
         try:
             return pymysql.connect(
@@ -684,6 +704,7 @@ class DatabaseManagerBase:
                 password=config['password'],
                 database=config['database'],
                 port=config['port'],
+                connect_timeout=3, # 短超时防止阻塞
                 cursorclass=pymysql.cursors.DictCursor
             )
         except Exception as e:

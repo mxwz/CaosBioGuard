@@ -1542,6 +1542,31 @@ class SettingsDialog(QDialog):
         line_startup.setStyleSheet("background-color: #cccccc;")
         layout1.addWidget(line_startup)
 
+        # Section 3: Network Mode
+        label_network = QLabel("网络模式 (重启生效)")
+        label_network.setStyleSheet("color: #888888; font-weight: bold; font-size: 14px; margin-top: 10px;")
+        layout1.addWidget(label_network)
+
+        network_layout = QHBoxLayout()
+        self.radio_online = QRadioButton("在线模式 (Online)")
+        self.radio_offline = QRadioButton("离线模式 (Offline)")
+        
+        self.network_group = QButtonGroup(self)
+        self.network_group.addButton(self.radio_online)
+        self.network_group.addButton(self.radio_offline)
+        
+        network_layout.addWidget(self.radio_online)
+        network_layout.addWidget(self.radio_offline)
+        network_layout.addStretch()
+        layout1.addLayout(network_layout)
+
+        # Init selection
+        network_mode = self.config_manager.get_network_mode()
+        if network_mode == 'Offline':
+            self.radio_offline.setChecked(True)
+        else:
+            self.radio_online.setChecked(True)
+
         layout1.addStretch()
         self.stacked_widget.addWidget(page1)
 
@@ -1658,9 +1683,17 @@ class SettingsDialog(QDialog):
         else:
             start_mode = 'Sync'
         
+        if hasattr(self, 'radio_offline') and self.radio_offline.isChecked():
+            network_mode = 'Offline'
+        else:
+            network_mode = 'Online'
+        
         # Check if startup mode changed
         old_start_mode = self.config_manager.get_start_mode()
         self.config_manager.set_start_mode(start_mode)
+        
+        old_network_mode = self.config_manager.get_network_mode()
+        self.config_manager.set_network_mode(network_mode)
         
         # Save Web Admin config
         host = self.edit_host.text()
@@ -1672,8 +1705,8 @@ class SettingsDialog(QDialog):
                 pass
 
         msg = "设置已保存"
-        if old_start_mode != start_mode:
-            msg += "\n启动模式已更改，请重启程序以生效。"
+        if old_start_mode != start_mode or old_network_mode != network_mode:
+            msg += "\n配置已更改，请重启程序以生效。"
             
         QMessageBox.information(self, "提示", msg)
         self.accept()
