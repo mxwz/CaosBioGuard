@@ -1,0 +1,198 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>人脸比对 (1:1)</h3>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">上传比对图片</h5>
+                </div>
+                <div class="card-body">
+                    <form id="compareForm" enctype="multipart/form-data">
+                        <div class="row">
+                            <!-- Image 1 -->
+                            <div class="col-md-6 mb-3 text-center">
+                                <h6>图片 1</h6>
+                                <div class="border rounded p-3 mb-2 bg-light d-flex justify-content-center align-items-center" style="height: 300px; overflow: hidden; cursor: pointer;" onclick="document.getElementById('image1').click()">
+                                    <img id="preview1" src="" alt="预览图 1" style="max-height: 100%; max-width: 100%; display: none;">
+                                    <div id="placeholder1" class="text-muted">
+                                        <i class="fas fa-cloud-upload-alt fa-3x mb-2"></i>
+                                        <p>点击选择或拖拽图片到此处</p>
+                                    </div>
+                                </div>
+                                <input class="form-control" type="file" id="image1" name="image1" accept="image/*" style="display: none;" onchange="previewImage(this, 'preview1', 'placeholder1')">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('image1').click()">重新选择</button>
+                            </div>
+
+                            <!-- Image 2 -->
+                            <div class="col-md-6 mb-3 text-center">
+                                <h6>图片 2</h6>
+                                <div class="border rounded p-3 mb-2 bg-light d-flex justify-content-center align-items-center" style="height: 300px; overflow: hidden; cursor: pointer;" onclick="document.getElementById('image2').click()">
+                                    <img id="preview2" src="" alt="预览图 2" style="max-height: 100%; max-width: 100%; display: none;">
+                                    <div id="placeholder2" class="text-muted">
+                                        <i class="fas fa-cloud-upload-alt fa-3x mb-2"></i>
+                                        <p>点击选择或拖拽图片到此处</p>
+                                    </div>
+                                </div>
+                                <input class="form-control" type="file" id="image2" name="image2" accept="image/*" style="display: none;" onchange="previewImage(this, 'preview2', 'placeholder2')">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('image2').click()">重新选择</button>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center mt-3">
+                            <button type="button" id="compareBtn" class="btn btn-primary btn-lg px-5" onclick="compareFaces()">
+                                <i class="fas fa-people-arrows"></i> 开始比对
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-lg ms-2" onclick="resetForm()">
+                                <i class="fas fa-undo"></i> 重置
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Result Section -->
+    <div class="row mt-4" id="resultSection" style="display: none;">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h5 class="card-title mb-0">比对结果</h5>
+                </div>
+                <div class="card-body text-center">
+                    <div id="loadingSpinner" style="display: none;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 text-muted">正在进行特征提取与比对，请稍候...</p>
+                    </div>
+
+                    <div id="resultContent" style="display: none;">
+                        <div class="mb-3">
+                            <h2 id="matchStatus" class="display-6 mb-3"></h2>
+                        </div>
+                        <div class="row justify-content-center">
+                            <div class="col-md-4">
+                                <div class="card border-primary mb-3">
+                                    <div class="card-header">相似度 (Similarity)</div>
+                                    <div class="card-body text-primary">
+                                        <h3 class="card-title" id="similarityScore">0.0000</h3>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-secondary mb-3">
+                                    <div class="card-header">比对阈值 (Threshold)</div>
+                                    <div class="card-body text-secondary">
+                                        <h3 class="card-title" id="thresholdValue">0.60</h3>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="alert alert-light mt-3" role="alert">
+                            <strong>提示：</strong> 相似度大于等于比对阈值（默认 0.6）时，判定为同一人。
+                        </div>
+                    </div>
+
+                    <div id="errorContent" class="alert alert-danger" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i> <span id="errorMessage"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function previewImage(input, previewId, placeholderId) {
+        if (input.files && input.files[0]) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var preview = document.getElementById(previewId);
+                var placeholder = document.getElementById(placeholderId);
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                placeholder.style.display = 'none';
+            }
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function resetForm() {
+        document.getElementById('compareForm').reset();
+        document.getElementById('preview1').src = '';
+        document.getElementById('preview1').style.display = 'none';
+        document.getElementById('placeholder1').style.display = 'block';
+        
+        document.getElementById('preview2').src = '';
+        document.getElementById('preview2').style.display = 'none';
+        document.getElementById('placeholder2').style.display = 'block';
+        
+        document.getElementById('resultSection').style.display = 'none';
+    }
+
+    function compareFaces() {
+        var file1 = document.getElementById('image1').files[0];
+        var file2 = document.getElementById('image2').files[0];
+
+        if (!file1 || !file2) {
+            alert('请先上传两张需要比对的图片！');
+            return;
+        }
+
+        var formData = new FormData();
+        formData.append('image1', file1);
+        formData.append('image2', file2);
+
+        // Show loading state
+        document.getElementById('resultSection').style.display = 'block';
+        document.getElementById('loadingSpinner').style.display = 'block';
+        document.getElementById('resultContent').style.display = 'none';
+        document.getElementById('errorContent').style.display = 'none';
+        document.getElementById('compareBtn').disabled = true;
+
+        fetch('{{ url_for("api_face_compare") }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('compareBtn').disabled = false;
+
+            if (data.success) {
+                document.getElementById('resultContent').style.display = 'block';
+                
+                // Update text and styling based on match
+                var matchStatus = document.getElementById('matchStatus');
+                if (data.is_match) {
+                    matchStatus.innerHTML = '<i class="fas fa-check-circle text-success"></i> 匹配成功，是同一人';
+                    matchStatus.className = 'display-6 mb-3 text-success';
+                } else {
+                    matchStatus.innerHTML = '<i class="fas fa-times-circle text-danger"></i> 匹配失败，不是同一人';
+                    matchStatus.className = 'display-6 mb-3 text-danger';
+                }
+
+                document.getElementById('similarityScore').innerText = data.similarity.toFixed(4);
+                document.getElementById('thresholdValue').innerText = data.threshold.toFixed(2);
+            } else {
+                document.getElementById('errorContent').style.display = 'block';
+                document.getElementById('errorMessage').innerText = data.message || '比对失败，请重试';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('compareBtn').disabled = false;
+            document.getElementById('errorContent').style.display = 'block';
+            document.getElementById('errorMessage').innerText = '网络或服务器错误，请检查控制台日志';
+        });
+    }
+</script>
+{% endblock %}

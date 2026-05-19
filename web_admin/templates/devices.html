@@ -1,0 +1,267 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h3 class="mb-4">设备管理</h3>
+
+    <div class="card mb-4">
+        <div class="card-header">本机设备信息</div>
+        <div class="card-body">
+            {% if local_device %}
+            <p><strong>设备ID:</strong> {{ local_device.device_id }}</p>
+            <p><strong>机器码:</strong> {{ local_device.machine_code }}</p>
+            <p><strong>注册时间:</strong> {{ local_device.registered_at }}</p>
+            {% else %}
+            <p>未获取到本机信息</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>云端已注册设备 (MySQL)</span>
+            <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()">
+                <i class="fas fa-sync"></i> 刷新列表
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>设备ID</th>
+                            <th>状态</th>
+                            <th>机器码</th>
+                            <th>最后在线时间</th>
+                            <th>注册时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for device in devices %}
+                        <tr>
+                            <td>
+                                {{ device.device_id }}
+                                {% if local_device and local_device.device_id == device.device_id %}
+                                <span class="badge bg-primary ms-1">本机</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if device.is_online %}
+                                    <span class="badge bg-success">
+                                        <i class="fas fa-circle me-1"></i>在线
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-circle me-1"></i>离线
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>{{ device.machine_code }}</td>
+                            <td>{{ device.last_seen }}</td>
+                            <td>{{ device.registered_at }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-info" onclick="viewDetails('{{ device.device_id }}')">详情</button>
+                                <button class="btn btn-sm btn-warning" onclick="openSettings('{{ device.device_id }}')">设置</button>
+                                {% if local_device and local_device.device_id == device.device_id %}
+                                <button class="btn btn-sm btn-secondary" disabled title="不可解绑本机设备">解绑</button>
+                                {% else %}
+                                <form action="{{ url_for('delete_device', device_id=device.device_id) }}" method="post" class="d-inline" onsubmit="return confirm('确定解绑该设备？此操作不可逆！');">
+                                    <button type="submit" class="btn btn-sm btn-danger">解绑</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center">暂无云端数据或未连接数据库</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">设备详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs" id="deviceTabs" role="tablist">
+                    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#basic">基础信息</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#network">网络配置</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#location">设备位置</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#hardware">硬件规格</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#status">运行状态</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#software">软件信息</a></li>
+                </ul>
+                <div class="tab-content p-3" id="detailsContent">
+                    <!-- Populated by JS -->
+                    <div class="text-center"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">设备设置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="deviceSettingsForm">
+                    <input type="hidden" id="settingDeviceId">
+                    <ul class="nav nav-tabs mb-3" id="settingsTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-bs-toggle="tab" href="#setting-business">业务模式</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#setting-startup">启动方式</a>
+                        </li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="setting-business">
+                            <div class="mb-3">
+                                <label class="form-label">业务模式 (Business Mode)</label>
+                                <select class="form-select" id="settingBusinessMode">
+                                    <option value="Attendance">考勤 (Attendance)</option>
+                                    <option value="Access Control">门禁 (Access Control)</option>
+                                    <option value="Test">测试 (Test)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="setting-startup">
+                            <div class="mb-3">
+                                <label class="form-label">启动方式 (Startup Mode)</label>
+                                <select class="form-select" id="settingStartupMode">
+                                    <option value="Sync">同步 (Sync)</option>
+                                    <option value="Async">异步 (Async)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveSettings()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function viewDetails(deviceId) {
+    var modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+    modal.show();
+    
+    fetch('/api/device_details/' + deviceId)
+        .then(response => response.json())
+        .then(data => {
+            if(data.success) {
+                renderDetails(data.data);
+            } else {
+                alert('加载失败: ' + data.message);
+            }
+        });
+}
+
+function openSettings(deviceId) {
+    document.getElementById('settingDeviceId').value = deviceId;
+    fetch('/api/device_settings/' + deviceId)
+        .then(response => response.json())
+        .then(data => {
+            if(data.success) {
+                document.getElementById('settingBusinessMode').value = data.business_mode;
+                document.getElementById('settingStartupMode').value = data.startup_mode;
+                var modal = new bootstrap.Modal(document.getElementById('settingsModal'));
+                modal.show();
+            } else {
+                alert('获取设置失败: ' + data.message);
+            }
+        });
+}
+
+function saveSettings() {
+    var deviceId = document.getElementById('settingDeviceId').value;
+    var businessMode = document.getElementById('settingBusinessMode').value;
+    var startupMode = document.getElementById('settingStartupMode').value;
+    
+    fetch('/api/device_settings/' + deviceId, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            business_mode: businessMode,
+            startup_mode: startupMode
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.success) {
+            alert('设置保存成功');
+            var modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+            modal.hide();
+        } else {
+            alert('保存失败: ' + data.message);
+        }
+    });
+}
+
+function renderDetails(d) {
+    const fields = {
+        'basic': [
+            ['设备ID', d.device_id], ['机器码', d.machine_code], ['型号', d.model],
+            ['序列号', d.serial_number], ['制造商', d.manufacturer], ['生产日期', d.production_date]
+        ],
+        'network': [
+            ['IP地址', d.ip_address], ['MAC地址', d.mac_address], ['接口类型', d.network_interface]
+        ],
+        'location': [
+            ['地理坐标', d.geo_coords], ['部署位置', d.deployment_location], 
+            ['站点名称', d.site_name], ['安装地址', d.install_address]
+        ],
+        'hardware': [
+            ['处理器', d.processor_info], ['内存', d.memory_capacity], 
+            ['存储', d.storage_info], ['扩展槽', d.expansion_slots]
+        ],
+        'status': [
+            ['固件版本', d.firmware_version], ['电源状态', d.power_status],
+            ['传感器', d.sensor_data], ['电池状态', d.battery_status],
+            ['最后在线', d.last_seen]
+        ],
+        'software': [
+            ['软件名称', d.software_name], ['版本号', d.software_version], ['UUID', d.software_uuid],
+            ['描述', d.software_description], ['供应商', d.software_vendor],
+            ['系统兼容性', d.os_compatibility], ['架构', d.arch],
+            ['许可证', d.license_type], ['构建时间', d.build_time],
+            ['PID', d.pid], ['启动时间', d.start_time], ['运行时长', d.runtime_duration],
+            ['运行状态', d.run_status], ['漏洞扫描', d.vuln_scan_result], ['补丁级别', d.patch_level]
+        ]
+    };
+    
+    let contentHtml = '';
+    for(let tab in fields) {
+        let activeClass = tab === 'basic' ? 'show active' : '';
+        contentHtml += `<div class="tab-pane fade ${activeClass}" id="${tab}"><table class="table table-bordered">`;
+        fields[tab].forEach(item => {
+            contentHtml += `<tr><th style="width:30%">${item[0]}</th><td>${item[1] || '-'}</td></tr>`;
+        });
+        contentHtml += `</table></div>`;
+    }
+    
+    document.getElementById('detailsContent').innerHTML = contentHtml;
+}
+</script>
+{% endblock %}

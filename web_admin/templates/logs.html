@@ -1,0 +1,78 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>运行日志</h3>
+        <div>
+            <form action="{{ url_for('clear_logs') }}" method="post" class="d-inline" onsubmit="return confirmClear();">
+                <input type="hidden" name="type" value="system">
+                <button type="submit" class="btn btn-outline-danger btn-sm me-2">
+                    <i class="fas fa-trash"></i> 清空日志
+                </button>
+            </form>
+            <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">
+                <i class="fas fa-sync-alt"></i> 刷新
+            </button>
+        </div>
+    </div>
+
+    <div class="card bg-dark text-light">
+        <div class="card-header bg-secondary d-flex justify-content-between">
+            <span>终端输出日志</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="log-console" style="height: 600px; overflow-y: auto; padding: 10px; font-family: 'Courier New', monospace; background-color: #1e1e1e; color: #d4d4d4;">
+                {% for log in logs %}
+                <div class="log-line">
+                    <span class="text-muted">[{{ log.time }}]</span>
+                    {% if log.level == 'ERROR' %}
+                        <span class="text-danger fw-bold">[{{ log.level }}]</span>
+                    {% elif log.level == 'WARNING' %}
+                        <span class="text-warning fw-bold">[{{ log.level }}]</span>
+                    {% elif log.level == 'INFO' %}
+                        <span class="text-success fw-bold">[{{ log.level }}]</span>
+                    {% else %}
+                        <span class="text-info fw-bold">[{{ log.level }}]</span>
+                    {% endif %}
+                    <span class="text-info">[{{ log.module }}]</span>
+                    {% if log.device_id %}
+                        <span class="text-secondary">&lt;{{ log.device_id[:8] }}...&gt;</span>
+                    {% endif %}
+                    <span class="text-light">{{ log.message }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card-footer bg-secondary">
+             <nav aria-label="Page navigation">
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                    <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                        <a class="page-link bg-dark text-light border-secondary" href="{{ url_for('run_logs', page=page-1) }}">上一页</a>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link bg-dark text-light border-secondary">第 {{ page }} 页</span>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link bg-dark text-light border-secondary" href="{{ url_for('run_logs', page=page+1) }}">下一页</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto refresh every 5 seconds
+    setTimeout(function(){
+       location.reload(); 
+    }, 5000);
+
+    function confirmClear() {
+        if (confirm('确定要清空所有系统日志吗？')) {
+            return confirm('此操作不可撤销，请再次确认是否继续？');
+        }
+        return false;
+    }
+</script>
+{% endblock %}

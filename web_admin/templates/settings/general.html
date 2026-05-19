@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>常规设置</h3>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-sliders-h me-2"></i> 系统参数
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('settings_general') }}">
+                    <!-- Sync Interval -->
+                    <div class="mb-4">
+                        <label for="sync_interval" class="form-label fw-bold">数据同步间隔 (秒)</label>
+                        <input type="number" class="form-control" id="sync_interval" name="sync_interval" 
+                               value="{{ sync_interval }}" min="0" required>
+                        <div class="form-text">
+                            设置为 0 表示启用<strong>实时同步</strong>（数据生成即上传）。
+                            其他值表示周期性同步间隔（如 30 秒）。
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i> 保存设置
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

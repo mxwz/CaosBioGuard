@@ -1,0 +1,650 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Face List Section -->
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>人脸库管理</span>
+                    <div class="d-flex align-items-center flex-wrap gap-2">
+                        <form method="get" class="d-flex align-items-center gap-2 m-0">
+                            <!-- Name Search -->
+                            <input type="text" name="search_name" class="form-control form-control-sm" placeholder="按名字搜索..." value="{{ search_name }}" style="width: 150px;">
+                            
+                            <!-- Group Filter -->
+                            <select name="filter_group" class="form-select form-select-sm" style="width: auto;">
+                                <option value="all" {% if filter_group == 'all' %}selected{% endif %}>全部分组</option>
+                                <option value="attendance" {% if filter_group == 'attendance' %}selected{% endif %}>考勤</option>
+                                <option value="access" {% if filter_group == 'access' %}selected{% endif %}>门禁</option>
+                            </select>
+                            
+                            <!-- List Type Filter -->
+                            <select name="filter_list_type" class="form-select form-select-sm" style="width: auto;">
+                                <option value="all" {% if filter_list_type == 'all' %}selected{% endif %}>全部名单</option>
+                                <option value="white" {% if filter_list_type == 'white' %}selected{% endif %}>白名单</option>
+                                <option value="black" {% if filter_list_type == 'black' %}selected{% endif %}>黑名单</option>
+                            </select>
+
+                            <!-- Device Filter -->
+                            <select name="device_id" class="form-select form-select-sm" style="width: auto;">
+                                <option value="all" {% if selected_device == 'all' %}selected{% endif %}>所有设备 (All)</option>
+                                <option value="admin" {% if selected_device == 'admin' %}selected{% endif %}>管理员列表</option>
+                                {% for device in cloud_devices %}
+                                <option value="{{ device.device_id }}" {% if selected_device == device.device_id %}selected{% endif %}>
+                                    {{ device.device_id[:8] }}... ({{ device.machine_code[:8] }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                            
+                            <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-search"></i> 筛选</button>
+                        </form>
+                        <button class="btn btn-primary btn-sm ms-2" data-bs-toggle="modal" data-bs-target="#addFaceModal">
+                            <i class="fas fa-plus"></i> 添加人脸
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <!-- Regular Headers -->
+                                <tr>
+                                    <th>头像</th>
+                                    <th>姓名</th>
+                                    <th>所属设备</th>
+                                    <th>分组</th>
+                                    <th>名单类型</th>
+                                    <th>详情</th>
+                                    <th>是否为管理员</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                    <!-- Render Regular Users -->
+                                    {% for user in users %}
+                                <tr>
+                                    <td>
+                                        {% if user.has_image %}
+                                        <img src="{{ url_for('face_image', name=user.name, device_id=user.device_id) }}" alt="{{ user.name }}" width="50" height="50" class="rounded-circle">
+                                        {% else %}
+                                        <div class="rounded-circle bg-secondary d-flex justify-content-center align-items-center" style="width: 50px; height: 50px; color: white;">
+                                            <i class="fas fa-user"></i>
+                                        </div>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ user.name }}</td>
+                                    <td>
+                                        {% if user.device_id == 'admin' %}
+                                            <span class="badge bg-secondary">管理员 (Web)</span>
+                                        {% else %}
+                                            <span class="badge bg-info" title="{{ user.device_id }}">{{ user.device_id[:8] }}...</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user.groups == 'all' %}
+                                            <span class="badge bg-info">全部</span>
+                                        {% else %}
+                                            {% for group in user.groups.split(',') %}
+                                                {% if group == 'attendance' %}
+                                                    <span class="badge bg-primary">考勤</span>
+                                                {% elif group == 'access' %}
+                                                    <span class="badge bg-success">门禁</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">{{ group }}</span>
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user.list_type == 'black' %}
+                                            <span class="badge bg-dark">黑名单</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">白名单</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info" onclick='viewDetails({{ user.metadata | tojson | safe }}, "{{ user.name }}", "{{ user.groups }}", "{{ user.device_id }}", {{ "true" if user.is_admin else "false" }}, "{{ session.get("user") }}")'>
+                                            <i class="fas fa-info-circle"></i> 详情
+                                        </button>
+                                        {% if session.get('user') != 'admin' and user.device_id == 'admin' %}
+                                            <button class="btn btn-sm btn-secondary" disabled title="无权设置Web管理员">
+                                                <i class="fas fa-cog"></i> 设置
+                                            </button>
+                                        {% else %}
+                                            <button class="btn btn-sm btn-secondary" onclick='openSettings("{{ user.name }}", "{{ user.groups }}", "{{ user.list_type }}", "{{ user.device_id }}")'>
+                                                <i class="fas fa-cog"></i> 设置
+                                            </button>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user.device_id == 'admin' %}
+                                        <span class="badge bg-success"><i class="fas fa-check-circle"></i> Web管理员</span>
+                                        {% elif user.is_admin %}
+                                        <span class="badge bg-success"><i class="fas fa-check-circle"></i> 是</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">否</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <!-- Delete logic -->
+                                        {% if session.get('user') == 'admin' %}
+                                            <a href="{{ url_for('delete_face', name=user.name, device_id=user.device_id) }}" class="btn btn-sm btn-danger" onclick="return confirm('确定删除?')">删除</a>
+                                        {% else %}
+                                            {% if user.device_id == 'admin' %}
+                                                <button class="btn btn-sm btn-danger" disabled title="无权操作Web管理员">删除</button>
+                                            {% else %}
+                                                <a href="{{ url_for('delete_face', name=user.name, device_id=user.device_id) }}" class="btn btn-sm btn-danger" onclick="return confirm('确定删除?')">删除</a>
+                                            {% endif %}
+                                        {% endif %}
+                                        
+                                        <!-- Toggle admin logic -->
+                                        {% if user.device_id != 'admin' %}
+                                            {% if not user.is_admin %}
+                                                <a href="{{ url_for('toggle_admin', name=user.name, action='grant', device_id=user.device_id) }}" class="btn btn-sm btn-warning">设为管理员</a>
+                                            {% else %}
+                                                <a href="{{ url_for('toggle_admin', name=user.name, action='revoke', device_id=user.device_id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定移除 {{ user.name }} 的管理员权限?')">移除管理员</a>
+                                            {% endif %}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="addFaceModal" tabindex="-1" aria-labelledby="addFaceModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addFaceModalLabel">添加人脸</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('add_face') }}" method="post" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">姓名</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="device_id" class="form-label">所属设备</label>
+                        <select class="form-select" id="device_id" name="device_id">
+                            <option value="admin" {% if selected_device == 'admin' %}selected{% endif %}>管理员 (Admin)</option>
+                            {% for device in cloud_devices %}
+                            <option value="{{ device.device_id }}" {% if selected_device == device.device_id %}selected{% endif %}>
+                                {{ device.device_id[:8] }}... ({{ device.machine_code[:8] }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">选择此人脸授权的边缘设备，"全局"表示所有设备均可同步。</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">业务分组</label>
+                        <div class="form-check">
+                            <input class="form-check-input group-checkbox" type="checkbox" value="attendance" id="group_attendance" name="groups" onchange="updateFormFields()">
+                            <label class="form-check-label" for="group_attendance">考勤</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input group-checkbox" type="checkbox" value="access" id="group_access" name="groups" onchange="updateFormFields()">
+                            <label class="form-check-label" for="group_access">门禁</label>
+                        </div>
+                        <small class="text-muted">勾选两个则默认为"全部"</small>
+                    </div>
+
+                    <!-- Dynamic Fields Container -->
+                    <div id="dynamic_fields"></div>
+
+                    <div class="mb-3">
+                        <label for="list_type" class="form-label">名单类型</label>
+                        <select class="form-select" id="list_type" name="list_type">
+                            <option value="white" selected>白名单 (正常通行)</option>
+                            <option value="black">黑名单 (禁止通行/报警)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="image" class="form-label">人脸图片</label>
+                        <input type="file" class="form-control" id="image" name="image" accept="image/*" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">用户设置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('edit_face') }}" method="post">
+                <div class="modal-body">
+                    <input type="hidden" name="name" id="settings_name">
+                    <input type="hidden" name="device_id" id="settings_device_id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">分组设置</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="groups" value="attendance" id="settings_group_attendance">
+                            <label class="form-check-label" for="settings_group_attendance">考勤</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="groups" value="access" id="settings_group_access">
+                            <label class="form-check-label" for="settings_group_access">门禁</label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">名单类型</label>
+                        <select name="list_type" id="settings_list_type" class="form-select">
+                            <option value="white">白名单 (正常通行)</option>
+                            <option value="black">黑名单 (禁止通行/报警)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">用户详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-bordered" id="detailsTable">
+                    <!-- Populated by JS -->
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Templates data from backend
+    const templates = {{ templates | tojson | safe }};
+    const enums = {{ enums | tojson | safe }};
+
+    // Init fields
+    // Wait for DOM content loaded to ensure elements exist
+    document.addEventListener('DOMContentLoaded', function() {
+        updateFormFields();
+    });
+
+    function updateFormFields() {
+        // Determine which templates to show based on checkboxes
+        const attendanceEl = document.getElementById('group_attendance');
+        const accessEl = document.getElementById('group_access');
+        
+        // Safety check if elements exist
+        if (!attendanceEl || !accessEl) return;
+        
+        const attendanceChecked = attendanceEl.checked;
+        const accessChecked = accessEl.checked;
+        
+        const container = document.getElementById('dynamic_fields');
+        container.innerHTML = '';
+        
+        let templatesToShow = [];
+        // Only show if checkbox is checked.
+        if (attendanceChecked) templatesToShow.push('company');
+        if (accessChecked) templatesToShow.push('community');
+        
+        console.log("Templates available:", Object.keys(templates)); // Debug
+        console.log("Templates to show:", templatesToShow); // Debug
+        
+        if (templatesToShow.length === 0) {
+             // Optional: Show message or keep empty
+             return;
+        }
+
+        templatesToShow.forEach(type => {
+            if (templates[type]) {
+                const header = document.createElement('h6');
+                header.className = 'mt-3 mb-2 border-bottom pb-1';
+                header.innerText = type === 'company' ? '企业考勤信息' : '社区门禁信息';
+                container.appendChild(header);
+                
+                templates[type].forEach(field => {
+                    if (field.name === 'name') return; 
+                    
+                    const div = document.createElement('div');
+                    div.className = 'mb-3';
+                    
+                    const label = document.createElement('label');
+                    label.className = 'form-label';
+                    label.innerText = field.label;
+                    div.appendChild(label);
+                    
+                    // Prefix field name with template type to avoid collision (e.g. note)
+                    // We need to handle this in backend too.
+                    // For simplicity, let's use the field name directly but be aware of overwrites if same name.
+                    // "note" is in both. If user fills both, last one wins? 
+                    // Better to prefix: "Company_note", "Community_note". 
+                    // BUT database metadata is flat. 
+                    // Let's prefix in UI name attribute, and merge in backend.
+                    const inputName = `${type}_${field.name}`;
+                    
+                    if (field.type === 'enum' && enums[field.name]) {
+                        const select = document.createElement('select');
+                        select.className = 'form-select';
+                        select.name = inputName;
+                        if (field.required) select.required = true;
+                        
+                        // Add empty option
+                        const defaultOpt = document.createElement('option');
+                        defaultOpt.value = "";
+                        defaultOpt.innerText = "请选择...";
+                        select.appendChild(defaultOpt);
+                        
+                        enums[field.name].forEach(opt => {
+                            const option = document.createElement('option');
+                            option.value = opt;
+                            option.innerText = opt;
+                            select.appendChild(option);
+                        });
+                        div.appendChild(select);
+                    } else if (field.type === 'multiselect' && enums[field.name]) {
+                        // Multi-select checkboxes
+                        const wrapper = document.createElement('div');
+                        enums[field.name].forEach(opt => {
+                            const checkDiv = document.createElement('div');
+                            checkDiv.className = 'form-check form-check-inline';
+                            
+                            const checkbox = document.createElement('input');
+                            checkbox.className = 'form-check-input';
+                            checkbox.type = 'checkbox';
+                            checkbox.name = inputName; // Same name for all, Flask handles list
+                            checkbox.value = opt;
+                            checkbox.id = inputName + '_' + opt;
+                            
+                            const lbl = document.createElement('label');
+                            lbl.className = 'form-check-label';
+                            lbl.htmlFor = checkbox.id;
+                            lbl.innerText = opt;
+                            
+                            checkDiv.appendChild(checkbox);
+                            checkDiv.appendChild(lbl);
+                            wrapper.appendChild(checkDiv);
+                        });
+                        div.appendChild(wrapper);
+                    } else if (field.type === 'date') {
+                        const input = document.createElement('input');
+                        input.type = 'date';
+                        input.className = 'form-control';
+                        input.name = inputName;
+                        if (field.required) input.required = true;
+                        div.appendChild(input);
+                    } else if (field.type === 'datetime') {
+                        const input = document.createElement('input');
+                        input.type = 'datetime-local';
+                        input.className = 'form-control';
+                        input.name = inputName;
+                        // Default to now + 1 year if empty? No, leave empty
+                        input.step = "1"; // Allow seconds
+                        if (field.required) input.required = true;
+                        div.appendChild(input);
+                    } else {
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.className = 'form-control';
+                        input.name = inputName;
+                        if (field.required) input.required = true;
+                        
+                        // Add Validation
+                        if (field.name === 'id_card') {
+                            input.pattern = "(^\\d{15}$)|(^\\d{18}$)|(^\\d{17}(\\d|X|x)$)";
+                            input.title = "请输入正确的身份证号";
+                        } else if (field.name === 'phone') {
+                            // Simple international phone regex or +86 specific
+                            input.pattern = "^\\+86\\d{11}$"; 
+                            input.title = "请输入正确的手机号 (例如 +8613800138000)";
+                            input.placeholder = "+8613800138000";
+                        } else if (field.name === 'email') {
+                            input.type = 'email';
+                        }
+                        
+                        div.appendChild(input);
+                    }
+                    
+                    container.appendChild(div);
+                });
+            }
+        });
+    }
+    
+    function openSettings(name, groups, listType, deviceId) {
+        document.getElementById('settings_name').value = name;
+        document.getElementById('settings_device_id').value = deviceId;
+        
+        // Reset checkboxes
+        document.getElementById('settings_group_attendance').checked = false;
+        document.getElementById('settings_group_access').checked = false;
+        
+        if (groups === 'all') {
+            document.getElementById('settings_group_attendance').checked = true;
+            document.getElementById('settings_group_access').checked = true;
+        } else {
+            const groupList = groups.split(',');
+            groupList.forEach(g => {
+                if (g.trim() === 'attendance') document.getElementById('settings_group_attendance').checked = true;
+                if (g.trim() === 'access') document.getElementById('settings_group_access').checked = true;
+            });
+        }
+        
+        document.getElementById('settings_list_type').value = listType;
+        
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('settingsModal'));
+        modal.show();
+    }
+
+    function viewDetails(metadata, name, groups, device_id, is_admin, current_user) {
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('detailsModal'));
+        const modalBody = document.querySelector('#detailsModal .modal-body');
+        const modalFooter = document.querySelector('#detailsModal .modal-content').appendChild(document.createElement('div'));
+        modalFooter.className = "modal-footer";
+        
+        // Remove existing footer if any
+        const existingFooter = document.querySelector('#detailsModal .modal-footer');
+        if(existingFooter) existingFooter.remove();
+        
+        // Check if user has permission to edit this profile
+        // Super admin ('admin') can edit anyone
+        // Current user can edit themselves
+        // Sub-admin cannot edit other Web admins (including themselves from list, they can edit profile from header though)
+        let canEdit = true;
+        if (current_user !== 'admin') {
+            if (device_id === 'admin') {
+                canEdit = false;
+            }
+        }
+        
+        // Determine tabs based on groups
+        let showCompany = false;
+        let showCommunity = false;
+        
+        if (groups === 'all') {
+            showCompany = true;
+            showCommunity = true;
+        } else {
+            const groupList = groups.split(',');
+            if (groupList.includes('attendance')) showCompany = true;
+            if (groupList.includes('access')) showCommunity = true;
+        }
+
+        // Build Tabs for Multi-template
+        let tabsHtml = `<ul class="nav nav-tabs mb-3" id="detailTabs" role="tablist">`;
+        
+        if (showCompany) {
+            tabsHtml += `
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link ${showCompany ? 'active' : ''}" id="company-tab" data-bs-toggle="tab" data-bs-target="#company-pane" type="button" role="tab" aria-controls="company-pane" aria-selected="${showCompany}">企业考勤</button>
+                </li>`;
+        }
+        
+        if (showCommunity) {
+            tabsHtml += `
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link ${!showCompany && showCommunity ? 'active' : ''}" id="community-tab" data-bs-toggle="tab" data-bs-target="#community-pane" type="button" role="tab" aria-controls="community-pane" aria-selected="${!showCompany && showCommunity}">社区门禁</button>
+                </li>`;
+        }
+            
+        tabsHtml += `</ul>
+            <form id="editFaceForm" action="{{ url_for('edit_face') }}" method="post">
+                <input type="hidden" name="name" value="${name}">
+                
+                <div class="mb-3 p-2 border rounded bg-light">
+                    <label class="form-label fw-bold">所属设备</label>
+                    <select class="form-select form-select-sm" name="device_id" ${!canEdit ? 'disabled' : ''}>
+                        <option value="global" ${device_id === 'global' ? 'selected' : ''}>全局 (Global)</option>
+                        {% for device in cloud_devices %}
+                        <option value="{{ device.device_id }}" ${device_id === '{{ device.device_id }}' ? 'selected' : ''}>
+                            {{ device.device_id[:8] }}... ({{ device.machine_code[:8] }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="tab-content" id="detailTabContent">
+        `;
+        
+        // Helper to build table for a template type (Editable)
+        const buildTable = (type) => {
+            type = type.toLowerCase(); // Ensure lowercase for template lookup if keys are capitalized in backend but we use lowercase here? 
+            // Wait, in backend config keys are "Company" and "Community". 
+            // But we pushed 'company' and 'community' to templatesToShow in add face.
+            // Let's check templates object keys. They come from config.ini [Templates] section keys.
+            // ConfigParser keys are case-insensitive by default but preserved?
+            // Actually ConfigParser converts keys to lowercase by default!
+            // So templates['company'] is correct.
+            
+            let html = `<div class="p-2">`;
+            
+            // We need to access templates with correct case. 
+            // Let's try to match case-insensitively or assume lowercase from config parser.
+            let templateFields = templates[type] || templates[type.charAt(0).toUpperCase() + type.slice(1)];
+            
+            if (templateFields) {
+                templateFields.forEach(field => {
+                    if (field.name === 'name') return;
+                    
+                    // Prefix key logic must match backend. Backend uses template_type + "_" + field_name.
+                    // If template key is "Company", prefix is "Company_".
+                    // If ConfigParser made it "company", prefix is "company_".
+                    // Let's rely on the key we found in templates object.
+                    // We need to find the key in templates object that matches 'type'.
+                    let realTypeKey = Object.keys(templates).find(k => k.toLowerCase() === type.toLowerCase());
+                    const prefixedKey = `${realTypeKey}_${field.name}`;
+                    
+                    // For multiselect, value might be a comma separated string
+                    const value = metadata[prefixedKey] || metadata[field.name] || ''; 
+                    
+                    html += `<div class="mb-2 row">
+                        <label class="col-sm-4 col-form-label fw-bold">${field.label}</label>
+                        <div class="col-sm-8">`;
+                    
+                    if (field.type === 'enum' && enums[field.name]) {
+                        html += `<select class="form-select form-select-sm" name="${prefixedKey}" ${!canEdit ? 'disabled' : ''}>
+                                    <option value="">请选择...</option>`;
+                        enums[field.name].forEach(opt => {
+                            const selected = value === opt ? 'selected' : '';
+                            html += `<option value="${opt}" ${selected}>${opt}</option>`;
+                        });
+                        html += `</select>`;
+                    } else if (field.type === 'multiselect' && enums[field.name]) {
+                        html += `<div>`;
+                        const currentValues = value.split(',');
+                        enums[field.name].forEach(opt => {
+                            const checked = currentValues.includes(opt) ? 'checked' : '';
+                            // Use same name to get list in backend
+                            html += `<div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" name="${prefixedKey}" value="${opt}" ${checked} ${!canEdit ? 'disabled' : ''}>
+                                        <label class="form-check-label">${opt}</label>
+                                     </div>`;
+                        });
+                        html += `</div>`;
+                    } else if (field.type === 'date') {
+                        html += `<input type="date" class="form-control form-control-sm" name="${prefixedKey}" value="${value}" ${!canEdit ? 'readonly' : ''}>`;
+                    } else if (field.type === 'datetime') {
+                        html += `<input type="datetime-local" class="form-control form-control-sm" name="${prefixedKey}" value="${value}" step="1" ${!canEdit ? 'readonly' : ''}>`;
+                    } else {
+                        let inputType = 'text';
+                        let pattern = '';
+                        let title = '';
+                        
+                         if (field.name === 'id_card') {
+                            pattern = "(^\\d{15}$)|(^\\d{18}$)|(^\\d{17}(\\d|X|x)$)";
+                            title = "请输入正确的身份证号";
+                        } else if (field.name === 'phone') {
+                            pattern = "^\\+86\\d{11}$"; 
+                            title = "请输入正确的手机号 (+86...)";
+                        } else if (field.name === 'email') {
+                            inputType = 'email';
+                        }
+                        
+                        html += `<input type="${inputType}" class="form-control form-control-sm" name="${prefixedKey}" value="${value}" pattern="${pattern}" title="${title}" ${!canEdit ? 'readonly' : ''}>`;
+                    }
+                    
+                    html += `</div></div>`;
+                });
+            } else {
+                html += `<div class="text-center text-muted py-3">无模板信息</div>`;
+            }
+            html += `</div>`;
+            return html;
+        };
+
+        if (showCompany) {
+            tabsHtml += `<div class="tab-pane fade ${showCompany ? 'show active' : ''}" id="company-pane" role="tabpanel">${buildTable('company')}</div>`;
+        }
+        if (showCommunity) {
+             tabsHtml += `<div class="tab-pane fade ${!showCompany && showCommunity ? 'show active' : ''}" id="community-pane" role="tabpanel">${buildTable('community')}</div>`;
+        }
+        
+        tabsHtml += `</div></form>`;
+        
+        modalBody.innerHTML = tabsHtml;
+        
+        // Add footer buttons
+        let footerHtml = `
+            <div class="modal-footer border-top-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>`;
+        
+        if (canEdit) {
+            footerHtml += `<button type="submit" form="editFaceForm" class="btn btn-primary">保存修改</button>`;
+        }
+        
+        footerHtml += `</div>`;
+        modalBody.insertAdjacentHTML('beforeend', footerHtml);
+        
+        modal.show();
+    }
+
+    // Init fields
+    updateFormFields();
+</script>
+{% endblock %}

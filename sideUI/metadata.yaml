@@ -1,0 +1,15 @@
+# Software Metadata
+software_name: ArcFace Recognition System
+software_version: v2.5.0
+software_uuid: 550e8400-e29b-41d4-a716-446655440000
+software_description: Advanced Face Recognition System with Attendance and Access Control
+software_vendor: BioGuard, Inc.
+license_type: Enterprise
+copyright_info: Copyright (c) 2026 BioGuard, Inc. All rights reserved.
+repo_url: https://github.com/bioguard/arcface
+eula_url: https://bioguard.com/eula
+
+# Static Device Info (Overrides auto-detection if set)
+# device_type: Kiosk
+# department: IT
+# maintenance_record: 2026-01-15
