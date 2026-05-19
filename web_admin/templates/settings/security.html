@@ -1,0 +1,52 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>安全设置</h3>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-key me-2"></i> 修改登录 Token
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('settings_security') }}">
+                    <div class="mb-3">
+                        <label for="new_token" class="form-label fw-bold">新 Token</label>
+                        <input type="password" class="form-control" id="new_token" name="new_token" required placeholder="请输入新密码">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="confirm_token" class="form-label fw-bold">确认新 Token</label>
+                        <input type="password" class="form-control" id="confirm_token" name="confirm_token" required placeholder="请再次输入新密码">
+                    </div>
+
+                    <div class="mb-4 form-check">
+                        <input type="checkbox" class="form-check-input" id="confirm_check" required>
+                        <label class="form-check-label" for="confirm_check">我确认要更改管理员登录 Token，更改后将立即生效。</label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i> 更改密码
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-light">
+                <i class="fas fa-info-circle me-2"></i> 说明
+            </div>
+            <div class="card-body">
+                <p>管理员 Token 用于访问后台管理系统的密码登录验证。</p>
+                <p>请妥善保管您的 Token。如果您忘记了 Token，可以在服务器的 <code>config.ini</code> 文件中找到或重置它。</p>
+                <p class="text-muted small">注意：修改 Token 后，您可能需要重新登录。</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

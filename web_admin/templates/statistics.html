@@ -1,0 +1,184 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>数据统计</h3>
+        <form class="d-flex align-items-center" method="get" action="{{ url_for('statistics') }}">
+            <select class="form-select me-2" name="device_id" id="device_id">
+                <option value="all" {% if selected_device == 'all' %}selected{% endif %}>所有设备 (All)</option>
+                {% for device in cloud_devices %}
+                <option value="{{ device.device_id }}" {% if selected_device == device.device_id %}selected{% endif %}>
+                    {{ device.device_id[:8] }}... ({{ device.machine_code[:8] }})
+                </option>
+                {% endfor %}
+            </select>
+            <select class="form-select me-2" name="time_range" id="time_range" onchange="toggleCustomDate()">
+                <option value="today" {% if time_range == 'today' %}selected{% endif %}>今日</option>
+                <option value="yesterday" {% if time_range == 'yesterday' %}selected{% endif %}>昨日</option>
+                <option value="this_week" {% if time_range == 'this_week' %}selected{% endif %}>本周</option>
+                <option value="last_week" {% if time_range == 'last_week' %}selected{% endif %}>上周</option>
+                <option value="this_month" {% if time_range == 'this_month' %}selected{% endif %}>本月</option>
+                <option value="last_month" {% if time_range == 'last_month' %}selected{% endif %}>上月</option>
+                <option value="this_year" {% if time_range == 'this_year' %}selected{% endif %}>本年</option>
+                <option value="last_year" {% if time_range == 'last_year' %}selected{% endif %}>上年</option>
+                <option value="custom" {% if time_range == 'custom' %}selected{% endif %}>自定义</option>
+            </select>
+            <div id="custom_dates" class="d-flex" style="display: none !important;">
+                <input type="datetime-local" class="form-control me-2" name="start_date" value="{{ start_date }}">
+                <span class="align-self-center me-2">-</span>
+                <input type="datetime-local" class="form-control me-2" name="end_date" value="{{ end_date }}">
+            </div>
+            <button type="submit" class="btn btn-primary">查询</button>
+        </form>
+    </div>
+
+    <!-- User Statistics -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">用户统计 (实时)</div>
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-2">
+                    <h2 class="display-6">{{ stats.user.total }}</h2>
+                    <p class="text-muted">总注册用户</p>
+                </div>
+                <div class="col-md-2">
+                    <h2 class="display-6">{{ stats.user.attendance }}</h2>
+                    <p class="text-muted">考勤用户</p>
+                </div>
+                <div class="col-md-2">
+                    <h2 class="display-6">{{ stats.user.access }}</h2>
+                    <p class="text-muted">门禁用户</p>
+                </div>
+                <div class="col-md-3">
+                    <h2 class="display-6">{{ stats.user.has_image }}</h2>
+                    <p class="text-muted">有图像记录</p>
+                </div>
+                <div class="col-md-3">
+                    <h2 class="display-6 text-danger">{{ stats.user.missing_image }}</h2>
+                    <p class="text-danger">缺失图像</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance Trends -->
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">考勤统计</div>
+        <div class="card-body">
+             <canvas id="attendanceChart" height="100"></canvas>
+        </div>
+    </div>
+
+    <!-- Access Control & System Stats -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">门禁通行统计</div>
+                <div class="card-body">
+                    <div class="row align-items-center">
+                         <div class="col-md-6">
+                            <canvas id="accessChart"></canvas>
+                         </div>
+                         <div class="col-md-6">
+                             <ul class="list-group list-group-flush">
+                                 <li class="list-group-item d-flex justify-content-between align-items-center">
+                                     总通行次数
+                                     <span class="badge bg-primary rounded-pill">{{ stats.access.total_pass }}</span>
+                                 </li>
+                                 <li class="list-group-item d-flex justify-content-between align-items-center">
+                                     允许通行
+                                     <span class="badge bg-success rounded-pill">{{ stats.access.allowed }}</span>
+                                 </li>
+                                 <li class="list-group-item d-flex justify-content-between align-items-center">
+                                     拒绝/黑名单
+                                     <span class="badge bg-danger rounded-pill">{{ stats.access.denied }}</span>
+                                 </li>
+                             </ul>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">系统运行统计</div>
+                <div class="card-body">
+                    <ul class="list-group">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            系统错误日志数
+                            <span class="badge bg-danger rounded-pill">{{ stats.system.error_count }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            数据库连接状态
+                            <span class="badge bg-success rounded-pill">正常</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    function toggleCustomDate() {
+        var range = document.getElementById('time_range').value;
+        var custom = document.getElementById('custom_dates');
+        if (range === 'custom') {
+            custom.style.display = 'flex';
+            custom.style.setProperty('display', 'flex', 'important');
+        } else {
+            custom.style.display = 'none';
+            custom.style.setProperty('display', 'none', 'important');
+        }
+    }
+    
+    // Init on load
+    toggleCustomDate();
+
+    // Attendance Chart
+    const ctxAttendance = document.getElementById('attendanceChart').getContext('2d');
+    const attendanceChart = new Chart(ctxAttendance, {
+        type: 'line',
+        data: {
+            labels: {{ stats.attendance.daily_trend.dates | tojson }},
+            datasets: [{
+                label: '每日考勤人数',
+                data: {{ stats.attendance.daily_trend.counts | tojson }},
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1,
+                fill: true,
+                backgroundColor: 'rgba(75, 192, 192, 0.2)'
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+
+    // Access Chart
+    const ctxAccess = document.getElementById('accessChart').getContext('2d');
+    const accessChart = new Chart(ctxAccess, {
+        type: 'doughnut',
+        data: {
+            labels: ['允许通行', '拒绝/黑名单'],
+            datasets: [{
+                data: [{{ stats.access.allowed }}, {{ stats.access.denied }}],
+                backgroundColor: [
+                    'rgb(40, 167, 69)',
+                    'rgb(220, 53, 69)'
+                ],
+                hoverOffset: 4
+            }]
+        }
+    });
+</script>
+{% endblock %}

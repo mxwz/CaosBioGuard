@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArcFace 管理后台 - 登录</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f0f2f5;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            width: 100%;
+            max-width: 450px;
+            border: none;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .login-header {
+            background-color: #343a40;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .nav-tabs .nav-link {
+            color: #495057;
+        }
+        .nav-tabs .nav-link.active {
+            font-weight: bold;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            background-color: #000;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        #videoElement {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: #0d6efd;
+            box-shadow: 0 0 10px #0d6efd;
+            animation: scan 2s infinite linear;
+            display: none;
+        }
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="card login-card">
+    <div class="login-header">
+        <h4 class="mb-0"><i class="fas fa-shield-alt me-2"></i>ArcFace 管理后台</h4>
+    </div>
+    <div class="card-body p-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <ul class="nav nav-tabs nav-fill mb-4" id="loginTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="password-tab" data-bs-toggle="tab" data-bs-target="#password-pane" type="button" role="tab">密码登录</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="face-tab" data-bs-toggle="tab" data-bs-target="#face-pane" type="button" role="tab">人脸登录</button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="loginTabContent">
+            <!-- Password Login -->
+            <div class="tab-pane fade show active" id="password-pane" role="tabpanel">
+                <form action="{{ url_for('login') }}" method="post">
+                    <input type="hidden" name="login_type" value="password">
+                    <div class="mb-3">
+                        <label for="password" class="form-label">管理员密码</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                            <input type="password" class="form-control" id="password" name="password" required placeholder="请输入管理员 Token">
+                        </div>
+                        <div class="form-text mt-2">默认密码请查看服务器控制台日志或配置文件</div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">登 录</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Face Login -->
+            <div class="tab-pane fade" id="face-pane" role="tabpanel">
+                <div class="video-container">
+                    <video id="videoElement" autoplay playsinline></video>
+                    <div class="scan-line" id="scanLine"></div>
+                </div>
+                <div class="d-grid gap-2">
+                    <button id="startCameraBtn" class="btn btn-outline-primary"><i class="fas fa-camera me-2"></i>开启摄像头</button>
+                    <button id="captureBtn" class="btn btn-primary btn-lg" disabled><i class="fas fa-expand me-2"></i>识 别</button>
+                </div>
+                <div id="faceStatus" class="text-center mt-3 text-muted">请点击开启摄像头</div>
+                
+                <form id="faceForm" action="{{ url_for('login') }}" method="post" style="display:none;">
+                    <input type="hidden" name="login_type" value="face">
+                    <input type="hidden" name="image_data" id="imageData">
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="card-footer text-center text-muted py-3 bg-light border-top-0">
+        <small>&copy; 2026 ArcFace System</small>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const video = document.getElementById('videoElement');
+        const startBtn = document.getElementById('startCameraBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const scanLine = document.getElementById('scanLine');
+        const faceStatus = document.getElementById('faceStatus');
+        const imageDataInput = document.getElementById('imageData');
+        const faceForm = document.getElementById('faceForm');
+        let stream = null;
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error("当前环境不支持访问摄像头。请使用 localhost 或 https 协议访问。");
+                }
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                startBtn.style.display = 'none';
+                captureBtn.disabled = false;
+                scanLine.style.display = 'block';
+                faceStatus.innerText = "请正对摄像头，点击识别";
+                faceStatus.classList.remove('text-danger');
+            } catch (err) {
+                console.error("Error accessing camera:", err);
+                faceStatus.innerText = "无法访问摄像头: " + err.message;
+                faceStatus.classList.add('text-danger');
+            }
+        });
+
+        captureBtn.addEventListener('click', () => {
+            if (!stream) return;
+            
+            faceStatus.innerText = "正在识别...";
+            captureBtn.disabled = true;
+            
+            // Capture frame
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Convert to base64
+            const dataURL = canvas.toDataURL('image/jpeg');
+            imageDataInput.value = dataURL;
+            
+            // Submit form
+            faceForm.submit();
+        });
+
+        // Clean up stream when tab changes or page unloads
+        const faceTab = document.getElementById('face-tab');
+        faceTab.addEventListener('hidden.bs.tab', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+                video.srcObject = null;
+                startBtn.style.display = 'inline-block';
+                captureBtn.disabled = true;
+                scanLine.style.display = 'none';
+                faceStatus.innerText = "摄像头已关闭";
+            }
+        });
+    });
+</script>
+</body>
+</html>

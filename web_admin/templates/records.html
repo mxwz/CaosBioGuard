@@ -1,0 +1,246 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>记录查询</h3>
+        <button class="btn btn-outline-primary btn-sm" onclick="location.reload()">
+            <i class="fas fa-sync-alt"></i> 刷新
+        </button>
+    </div>
+    
+    <!-- Filter & Toolbar -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" action="{{ url_for('records') }}" class="row g-3 align-items-end" id="filterForm">
+                <input type="hidden" name="type" value="{{ record_type }}">
+                
+                <div class="col-md-2">
+                    <label class="form-label">时间范围</label>
+                    <select class="form-select" name="time_range" id="time_range" onchange="toggleCustomDate()">
+                        <option value="today" {% if time_range == 'today' %}selected{% endif %}>今日</option>
+                        <option value="yesterday" {% if time_range == 'yesterday' %}selected{% endif %}>昨日</option>
+                        <option value="this_week" {% if time_range == 'this_week' %}selected{% endif %}>本周</option>
+                        <option value="this_month" {% if time_range == 'this_month' %}selected{% endif %}>本月</option>
+                        <option value="custom" {% if time_range == 'custom' %}selected{% endif %}>自定义</option>
+                        <option value="all" {% if time_range == 'all' %}selected{% endif %}>全部</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4 custom-date" id="customDateContainer" style="display: none;">
+                    <label class="form-label">自定义时间 (开始 - 结束)</label>
+                    <div class="input-group">
+                        <input type="datetime-local" class="form-control" name="start_time" value="{{ start_time }}" step="1">
+                        <span class="input-group-text">至</span>
+                        <input type="datetime-local" class="form-control" name="end_time" value="{{ end_time }}" step="1">
+                    </div>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">搜索用户/内容</label>
+                    <input type="text" class="form-control" name="search" placeholder="输入姓名或备注..." value="{{ search_query }}">
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">设备ID</label>
+                    <input type="text" class="form-control" name="device_id" placeholder="输入设备ID..." value="{{ device_id_filter }}">
+                </div>
+                
+                {% if record_type == 'access' %}
+                <div class="col-md-2">
+                    <label class="form-label">状态</label>
+                    <select class="form-select" name="status">
+                        <option value="">全部</option>
+                        <option value="Allowed" {% if status_filter == 'Allowed' %}selected{% endif %}>允许通行</option>
+                        <option value="Denied" {% if status_filter == 'Denied' %}selected{% endif %}>拒绝/黑名单</option>
+                    </select>
+                </div>
+                {% endif %}
+                
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">查询</button>
+                </div>
+                
+                <div class="col-md-2 text-end">
+                     {% if record_type == 'system' or record_type == 'admin' %}
+                        <form action="{{ url_for('clear_logs') }}" method="post" class="d-inline" onsubmit="return confirmClear();">
+                            <input type="hidden" name="type" value="{{ record_type }}">
+                            <button type="submit" class="btn btn-outline-danger">
+                                <i class="fas fa-trash"></i> 清空
+                            </button>
+                        </form>
+                     {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>记录列表</span>
+                    <div>
+                        <button class="btn btn-outline-primary btn-sm me-2" onclick="manualSync()">
+                            <i class="fas fa-sync"></i> 手动同步
+                        </button>
+                        <div class="btn-group" role="group">
+                            <a href="{{ url_for('records', type='attendance') }}" class="btn btn-sm btn-{{ 'primary' if record_type == 'attendance' else 'outline-primary' }}">考勤记录</a>
+                            <a href="{{ url_for('records', type='access') }}" class="btn btn-sm btn-{{ 'primary' if record_type == 'access' else 'outline-primary' }}">门禁记录</a>
+                            <a href="{{ url_for('records', type='admin') }}" class="btn btn-sm btn-{{ 'primary' if record_type == 'admin' else 'outline-primary' }}">操作日志</a>
+                            <a href="{{ url_for('records', type='system') }}" class="btn btn-sm btn-{{ 'primary' if record_type == 'system' else 'outline-primary' }}">系统日志</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    {% if record_type == 'attendance' %}
+                                        <th>ID</th>
+                                        <th>姓名</th>
+                                        <th>时间</th>
+                                        <th>状态</th>
+                                        <th>备注</th>
+                                        <th>设备ID</th>
+                                        <th>同步状态</th>
+                                    {% elif record_type == 'access' %}
+                                        <th>ID</th>
+                                        <th>姓名</th>
+                                        <th>时间</th>
+                                        <th>方向</th>
+                                        <th>状态</th>
+                                        <th>备注</th>
+                                        <th>设备ID</th>
+                                        <th>同步状态</th>
+                                    {% elif record_type == 'admin' %}
+                                        <th>ID</th>
+                                        <th>管理员</th>
+                                        <th>动作</th>
+                                        <th>对象</th>
+                                        <th>详情</th>
+                                        <th>敏感度</th>
+                                        <th>时间</th>
+                                        <th>设备ID</th>
+                                        <th>同步状态</th>
+                                    {% elif record_type == 'system' %}
+                                        <th>ID</th>
+                                        <th>级别</th>
+                                        <th>时间</th>
+                                        <th>模块</th>
+                                        <th>消息</th>
+                                        <th>设备ID</th>
+                                        <th>同步状态</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for record in records %}
+                                <tr>
+                                    {% if record_type == 'attendance' %}
+                                        <td>{{ record.id }}</td>
+                                        <td>{{ record.name }}</td>
+                                        <td>{{ record.time }}</td>
+                                        <td>{{ record.status }}</td>
+                                        <td>{{ record.remark }}</td>
+                                        <td><small>{{ record.device_id }}</small></td>
+                                        <td><span class="badge bg-{{ 'success' if record.sync_status == 'synced' else 'warning' }}">{{ record.sync_status }}</span></td>
+                                    {% elif record_type == 'access' %}
+                                        <td>{{ record.id }}</td>
+                                        <td>{{ record.name }}</td>
+                                        <td>{{ record.time }}</td>
+                                        <td>{{ record.direction }}</td>
+                                        <td>{{ record.status }}</td>
+                                        <td>{{ record.remark }}</td>
+                                        <td><small>{{ record.device_id }}</small></td>
+                                        <td><span class="badge bg-{{ 'success' if record.sync_status == 'synced' else 'warning' }}">{{ record.sync_status }}</span></td>
+                                    {% elif record_type == 'admin' %}
+                                        <td>{{ record.id }}</td>
+                                        <td><strong>{{ record.admin }}</strong></td>
+                                        <td>{{ record.action }}</td>
+                                        <td>{{ record.target }}</td>
+                                        <td><small class="text-muted">{{ record.details }}</small></td>
+                                        <td>
+                                            <span class="badge bg-{{ 'danger' if record.sensitivity == 'high' else ('warning' if record.sensitivity == 'medium' else 'secondary') }}">
+                                                {{ record.sensitivity }}
+                                            </span>
+                                        </td>
+                                        <td>{{ record.time }}</td>
+                                        <td><small>{{ record.device_id }}</small></td>
+                                        <td><span class="badge bg-{{ 'success' if record.sync_status == 'synced' else 'warning' }}">{{ record.sync_status or 'pending' }}</span></td>
+                                    {% elif record_type == 'system' %}
+                                        <td>{{ record.id }}</td>
+                                        <td><span class="badge bg-{{ 'danger' if record.level == 'ERROR' else 'info' }}">{{ record.level }}</span></td>
+                                        <td>{{ record.time }}</td>
+                                        <td>{{ record.module }}</td>
+                                        <td>{{ record.message }}</td>
+                                        <td><small>{{ record.device_id }}</small></td>
+                                        <td><span class="badge bg-{{ 'success' if record.sync_status == 'synced' else 'warning' }}">{{ record.sync_status }}</span></td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination justify-content-center">
+                            <li class="page-item {{ 'disabled' if page == 1 else '' }}">
+                                <a class="page-link" href="{{ url_for('records', type=record_type, page=page-1, time_range=time_range, search=search_query, status=status_filter, device_id=device_id_filter, start_time=start_time, end_time=end_time) }}">上一页</a>
+                            </li>
+                            <li class="page-item disabled">
+                                <a class="page-link" href="#">第 {{ page }} 页</a>
+                            </li>
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('records', type=record_type, page=page+1, time_range=time_range, search=search_query, status=status_filter, device_id=device_id_filter, start_time=start_time, end_time=end_time) }}">下一页</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleCustomDate() {
+        var range = document.getElementById('time_range').value;
+        var customDiv = document.getElementById('customDateContainer');
+        if (range === 'custom') {
+            customDiv.style.display = 'block';
+        } else {
+            customDiv.style.display = 'none';
+        }
+    }
+    
+    // Init state
+    document.addEventListener('DOMContentLoaded', function() {
+        toggleCustomDate();
+    });
+
+    function manualSync() {
+        if (!confirm('确定要手动触发同步吗？')) return;
+        
+        fetch('/api/sync_now', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('同步成功');
+                location.reload();
+            } else {
+                alert('同步失败: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('请求错误: ' + error);
+        });
+    }
+
+    function confirmClear() {
+        if (confirm('确定要清空所有日志吗？')) {
+            return confirm('此操作不可撤销，且将删除所有历史记录。请再次确认是否继续？');
+        }
+        return false;
+    }
+</script>
+{% endblock %}

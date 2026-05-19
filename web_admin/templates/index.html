@@ -1,0 +1,56 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-header">人脸总数</div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ total_users }}</h5>
+                    <p class="card-text">已注册人脸数据总量</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-header">今日考勤</div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ today_attendance }}</h5>
+                    <p class="card-text">今日打卡人次</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning mb-3">
+                <div class="card-header">今日门禁</div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ today_access }}</h5>
+                    <p class="card-text">今日通过门禁总人次</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-header">在线设备</div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ online_devices }} / {{ total_devices }}</h5>
+                    <p class="card-text">实时在线终端</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">系统状态</div>
+                <div class="card-body">
+                    <p>系统运行正常。</p>
+                    <p><strong>数据库地址 (MySQL):</strong> {{ mysql_host }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArcFace 管理后台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .sidebar {
+            height: 100vh;
+            width: 250px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background-color: #343a40;
+            color: white;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        .sidebar-header {
+            padding: 20px 15px;
+            background-color: #212529;
+            text-align: center;
+            border-bottom: 1px solid #495057;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,.8);
+            padding: 12px 20px;
+            transition: all 0.3s;
+            border-left: 4px solid transparent;
+        }
+        .sidebar .nav-link:hover {
+            color: #fff;
+            background-color: rgba(255,255,255,0.1);
+        }
+        .sidebar .nav-link.active {
+            color: #fff;
+            background-color: #0d6efd;
+            border-left-color: #fff;
+        }
+        /* Submenu styles */
+        .submenu-item {
+            font-size: 0.9em;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            background-color: rgba(0,0,0,0.2);
+        }
+        .submenu-item:hover {
+            background-color: rgba(255,255,255,0.05);
+        }
+        .submenu-item.active {
+            background-color: rgba(13, 110, 253, 0.5); /* Lighter blue for submenu active */
+            border-left-color: transparent; /* No border for submenu */
+        }
+        
+        .rotate-180 {
+            transform: rotate(180deg);
+        }
+        
+        .content {
+            margin-left: 250px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            margin-bottom: 20px;
+        }
+        
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                margin-left: -250px;
+            }
+            .sidebar.active {
+                margin-left: 0;
+            }
+            .content {
+                margin-left: 0;
+            }
+            .content.active {
+                margin-left: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar d-flex flex-column p-3" id="sidebarMenu">
+    <div class="sidebar-header mb-4">
+        <h4>Caos BioGuard</h4>
+    </div>
+    <div class="nav flex-column mb-auto">
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if request.endpoint == 'index' else '' }}">
+            <i class="fas fa-tachometer-alt me-2"></i> 仪表盘
+        </a>
+        <a href="{{ url_for('faces') }}" class="nav-link {{ 'active' if request.endpoint == 'faces' else '' }}">
+            <i class="fas fa-users me-2"></i> 人脸管理
+        </a>
+        <a href="{{ url_for('face_compare') }}" class="nav-link {{ 'active' if request.endpoint == 'face_compare' else '' }}">
+            <i class="fas fa-people-arrows me-2"></i> 人脸比对
+        </a>
+        <a href="{{ url_for('records') }}" class="nav-link {{ 'active' if request.endpoint == 'records' else '' }}">
+            <i class="fas fa-list-alt me-2"></i> 记录查询
+        </a>
+        <a href="{{ url_for('device_management') }}" class="nav-link {{ 'active' if request.endpoint == 'device_management' else '' }}">
+            <i class="fas fa-desktop me-2"></i> 设备管理
+        </a>
+        <a href="{{ url_for('statistics') }}" class="nav-link {{ 'active' if request.endpoint == 'statistics' else '' }}">
+            <i class="fas fa-chart-bar me-2"></i> 数据统计
+        </a>
+        <a href="{{ url_for('run_logs') }}" class="nav-link {{ 'active' if request.endpoint == 'run_logs' else '' }}">
+            <i class="fas fa-terminal me-2"></i> 运行日志
+        </a>
+        
+        {% set settings_active = request.endpoint and request.endpoint.startswith('settings') %}
+        <a href="#settingsSubmenu" class="nav-link d-flex align-items-center justify-content-between {{ 'active' if settings_active else '' }}" data-bs-toggle="collapse" aria-expanded="{{ 'true' if settings_active else 'false' }}">
+                <span><i class="fas fa-cogs me-2"></i> 系统设置</span>
+                <i class="fas fa-chevron-down {{ 'rotate-180' if settings_active else '' }}" style="font-size: 0.8rem; transition: transform 0.3s;"></i>
+            </a>
+            <div class="collapse {{ 'show' if settings_active else '' }}" id="settingsSubmenu">
+                <a href="{{ url_for('settings_general') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_general' else '' }}" style="padding-left: 3rem;">
+                    <i class="fas fa-sliders-h me-2"></i> 常规设置
+                </a>
+            <a href="{{ url_for('settings_enums') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_enums' else '' }}" style="padding-left: 3rem;">
+                <i class="fas fa-list-ul me-2"></i> 枚举管理
+            </a>
+            <a href="{{ url_for('settings_database') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_database' else '' }}" style="padding-left: 3rem;">
+                <i class="fas fa-database me-2"></i> 数据库配置
+            </a>
+            <a href="{{ url_for('settings_security') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_security' else '' }}" style="padding-left: 3rem;">
+                <i class="fas fa-lock me-2"></i> 安全设置
+            </a>
+            <a href="{{ url_for('settings_about') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_about' else '' }}" style="padding-left: 3rem;">
+                <i class="fas fa-info-circle me-2"></i> 关于系统
+            </a>
+        </div>
+    </div>
+    
+    <div class="mt-auto pt-3 border-top">
+        <div class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" id="dropdownUser1" data-bs-toggle="dropdown" aria-expanded="false" style="cursor: pointer;">
+            {% if session.get('user') and session.get('user') != 'admin' %}
+                <img src="{{ url_for('face_image', name=session.get('user'), device_id=session.get('user_avatar_device')) }}" alt="" width="32" height="32" class="rounded-circle me-2" onerror="this.src='https://github.com/mdo.png'">
+            {% else %}
+                <img src="https://github.com/mdo.png" alt="" width="32" height="32" class="rounded-circle me-2">
+            {% endif %}
+            <strong>{{ session.get('user', '管理员') }}</strong>
+        </div>
+        <ul class="dropdown-menu dropdown-menu-dark text-small shadow" aria-labelledby="dropdownUser1">
+            <li><a class="dropdown-item" href="#">个人资料</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('logout') }}">退出登录</a></li>
+        </ul>
+    </div>
+</div>
+
+<div class="content">
+    <nav class="navbar navbar-expand-lg navbar-light bg-white mb-4 shadow-sm rounded">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">管理后台</span>
+            <div class="d-flex">
+                <span class="text-muted">欢迎, {{ session.get('user', '管理员') }}</span>
+            </div>
+        </div>
+    </nav>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+{% block scripts %}{% endblock %}
+<script>
+        // Sidebar State Persistence
+        // Run immediately to avoid flicker
+        (function() {
+            try {
+                const isExpanded = localStorage.getItem('settings_expanded') === 'true';
+                if (isExpanded) {
+                    // We need to wait for DOM to be ready to find elements? 
+                    // Or we can rely on this script being at the bottom of body.
+                    // Since it's at the bottom of body, elements exist.
+                    const settingsSubmenu = document.getElementById('settingsSubmenu');
+                    const settingsToggle = document.querySelector('a[href="#settingsSubmenu"]');
+                    
+                    if (settingsSubmenu && !settingsSubmenu.classList.contains('show')) {
+                        // Direct class manipulation to avoid animation
+                        settingsSubmenu.classList.add('show');
+                        
+                        if (settingsToggle) {
+                            settingsToggle.setAttribute('aria-expanded', 'true');
+                            const icon = settingsToggle.querySelector('.fa-chevron-down');
+                            if(icon) icon.classList.add('rotate-180');
+                        }
+                    }
+                }
+            } catch(e) { console.error(e); }
+        })();
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const settingsSubmenu = document.getElementById('settingsSubmenu');
+            
+            // Listen for toggle events to update localStorage
+            if (settingsSubmenu) {
+                settingsSubmenu.addEventListener('shown.bs.collapse', function () {
+                    localStorage.setItem('settings_expanded', 'true');
+                });
+                
+                settingsSubmenu.addEventListener('hidden.bs.collapse', function () {
+                    localStorage.setItem('settings_expanded', 'false');
+                });
+                
+                // If server rendered it active, ensure storage is synced
+                if (settingsSubmenu.classList.contains('show')) {
+                    localStorage.setItem('settings_expanded', 'true');
+                }
+            }
+        });
+    </script>
+</body>
+</html>

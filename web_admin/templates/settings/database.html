@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>数据库配置</h3>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-database me-2"></i> MySQL 连接设置
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('settings_database') }}">
+                    <div class="mb-3">
+                        <label class="form-label">主机地址 (Host)</label>
+                        <input type="text" class="form-control" name="db_host" value="{{ mysql_config.host }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">端口 (Port)</label>
+                        <input type="number" class="form-control" name="db_port" value="{{ mysql_config.port }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">用户名 (User)</label>
+                        <input type="text" class="form-control" name="db_user" value="{{ mysql_config.user }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">密码 (Password)</label>
+                        <input type="password" class="form-control" name="db_password" value="{{ mysql_config.password }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">数据库名 (Database)</label>
+                        <input type="text" class="form-control" name="db_name" value="{{ mysql_config.database }}" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i> 保存配置
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
