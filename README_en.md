@@ -51,13 +51,13 @@ Compared with common access control solutions, this system has significant advan
 
 | Dimension | 🔮 Caos BioGuard | Traditional IC/NFC | Pure Cloud API |
 | :--- | :--- | :--- | :--- |
-| **Method** | Dynamic Face (Future multi-biometrics) | Physical Card/NFC (Easy to lose/share) | Static image/video stream |
-| **Edge Compute** | Supported (Millisecond local matching) | Not Supported | Not Supported (Network dependent) |
-| **Anti-Spoofing** | Built-in offline FAS (Blocks photos/videos) | None | Consumes Cloud API quota |
-| **Offline Usability** | **Fully Available** (Local auth, async upload) | Registered cards only | Unavailable |
-| **Centralized Ctrl** | Supported (Global unified management) | Weak (Mostly local LAN) | Supported |
-| **Hardware Cost** | Very Low (Supports Pi/PC + USB cam) | Medium (Needs dedicated readers) | Low (But high long-term API cost) |
-| **Extensibility** | Extremely High (Full-stack Python open-source) | Very Low (Closed system) | Medium (Limited by APIs) |
+| **Method** | Face | Card/NFC | Image/Video |
+| **Edge Compute** | √ | × | × |
+| **Anti-Spoofing** | √ | × | × |
+| **Offline Usability** | √ | √ | × |
+| **Centralized Ctrl** | √ | × | √ |
+| **Hardware Cost** | Low | Medium | High |
+| **Extensibility** | High | Low | Medium |
 
 ---
 
