@@ -7,7 +7,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Flask](https://img.shields.io/badge/flask-%23000.svg?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![PySide6](https://img.shields.io/badge/PySide6-41CD52?style=for-the-badge&logo=qt&logoColor=white)](https://www.qt.io/)
-[![License](https://img.shields.io/badge/license-AGPLv3-blue?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 
 > A high-performance face recognition system based on `InsightFace` and `PyTorch`. It perfectly integrates **Cloud Centralized Management** and **Edge Real-time Computing**, supporting cross-platform (PC/Raspberry Pi) deployment to create a futuristic seamless access and attendance experience.
 

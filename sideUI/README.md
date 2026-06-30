@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/AI_Engine-InsightFace-FF6F00?style=for-the-badge" />
     <img src="https://img.shields.io/badge/Deep_Learning-PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" />
     <img src="https://img.shields.io/badge/GUI-PySide6-41CD52?style=for-the-badge&logo=qt&logoColor=white" />
-    <a href="./LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge" /></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge" /></a>
   </p>
   
   [**English Version**](README_en.md) | [**返回主页**](../README.md)

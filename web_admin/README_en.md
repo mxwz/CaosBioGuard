@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/Framework-Flask-black?style=for-the-badge&logo=flask" />
     <img src="https://img.shields.io/badge/Database-MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white" />
     <img src="https://img.shields.io/badge/Frontend-Jinja2%20%7C%20Bootstrap-7952B3?style=for-the-badge&logo=bootstrap&logoColor=white" />
-    <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue?style=for-the-badge" /></a>
+    <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge" /></a>
   </p>
   
   [**中文版本**](README.md) | [**Back to Main**](../README_en.md)
