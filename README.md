@@ -7,7 +7,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Flask](https://img.shields.io/badge/flask-%23000.svg?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![PySide6](https://img.shields.io/badge/PySide6-41CD52?style=for-the-badge&logo=qt&logoColor=white)](https://www.qt.io/)
-[![License](https://img.shields.io/badge/license-AGPLv3-blue?style=for-the-badge)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 
 > 基于 `InsightFace` 和 `PyTorch` 的高性能人脸识别系统。完美融合了 **云端集中管理** 与 **边缘实时计算**，支持跨平台（PC/树莓派）部署，为您打造极具未来感的无感通行与考勤体验。
 
