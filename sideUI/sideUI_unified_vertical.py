@@ -945,19 +945,22 @@ class ManageFacesDialog(QDialog):
                     has_local = True
                     break
                     
-            if has_local:
-                if self.database_manager.delete_face(name, local_device_id):
-                    QMessageBox.information(self, "成功", f"已删除 '{name}' 在本机的设备数据")
-                    self.populate_list()
+            try:
+                if has_local:
+                    if self.database_manager.delete_face(name, local_device_id):
+                        QMessageBox.information(self, "成功", f"已删除 '{name}' 在本机的设备数据")
+                        self.populate_list()
+                    else:
+                        QMessageBox.warning(self, "失败", f"删除 '{name}' 的人脸数据失败")
                 else:
-                    QMessageBox.warning(self, "失败", f"删除 '{name}' 的人脸数据失败")
-            else:
-                # Fallback to delete all or global if it's the only one
-                if self.database_manager.delete_face(name):
-                    QMessageBox.information(self, "成功", f"已删除 '{name}' 的人脸数据")
-                    self.populate_list()
-                else:
-                    QMessageBox.warning(self, "失败", f"删除 '{name}' 的人脸数据失败")
+                    # Fallback to delete all or global if it's the only one
+                    if self.database_manager.delete_face(name):
+                        QMessageBox.information(self, "成功", f"已删除 '{name}' 的人脸数据")
+                        self.populate_list()
+                    else:
+                        QMessageBox.warning(self, "失败", f"删除 '{name}' 的人脸数据失败")
+            except RuntimeError as e:
+                QMessageBox.warning(self, "失败", str(e))
                 
     # 添加公开的刷新方法
     def refresh_data(self):
@@ -2511,25 +2514,33 @@ class ArcFaceUI(QMainWindow):
         """捕获当前帧进行注册"""
         if hasattr(self, 'registering_name'):
             name = self.registering_name
+            success = True
 
-            # 获取当前帧
-            ret, frame = self.cap.read()
-            if ret:
-                # 处理帧以获取人脸位置
-                faces = self.face_worker.process_frame(frame)
-                if len(faces) > 0:
-                    # 提取人脸区域
-                    bbox = faces[0].bbox.astype(int)
-                    face_roi = frame[bbox[1]:bbox[3], bbox[0]:bbox[2]]
-                    # 同时保存人脸特征和人脸图像
-                    self.database_manager.add_face(name, embedding, face_roi)
+            # 获取当前帧（云边分离模式下 add_face 可能离线拒绝，捕获后提示）
+            try:
+                ret, frame = self.cap.read()
+                if ret:
+                    # 处理帧以获取人脸位置
+                    faces = self.face_worker.process_frame(frame)
+                    if len(faces) > 0:
+                        # 提取人脸区域
+                        bbox = faces[0].bbox.astype(int)
+                        face_roi = frame[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+                        # 同时保存人脸特征和人脸图像
+                        self.database_manager.add_face(name, embedding, face_roi)
+                    else:
+                        # 如果无法检测到人脸，只保存特征
+                        self.database_manager.add_face(name, embedding)
                 else:
-                    # 如果无法检测到人脸，只保存特征
+                    # 如果无法获取帧，只保存特征
                     self.database_manager.add_face(name, embedding)
-            else:
-                # 如果无法获取帧，只保存特征
-                self.database_manager.add_face(name, embedding)
-                
+            except RuntimeError as e:
+                success = False
+                QMessageBox.warning(self, "失败", str(e))
+            except Exception as e:
+                success = False
+                QMessageBox.critical(self, "错误", f"注册失败: {str(e)}")
+
             # 刷新管理对话框（如果打开）
             if self.manage_dialog is not None:
                 self.manage_dialog.refresh_data()
@@ -2547,8 +2558,9 @@ class ArcFaceUI(QMainWindow):
             delattr(self, 'registering_name')
 
             # 更新UI
-            self.status_bar.showMessage(f"人脸 '{name}' 注册成功")
-            QMessageBox.information(self, "成功", f"人脸 '{name}' 已保存")
+            if success:
+                self.status_bar.showMessage(f"人脸 '{name}' 注册成功")
+                QMessageBox.information(self, "成功", f"人脸 '{name}' 已保存")
 
             # 清除视频显示
             self.video_label.clear()

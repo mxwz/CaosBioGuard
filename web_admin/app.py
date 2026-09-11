@@ -4,15 +4,19 @@ import logging
 import secrets
 import hashlib
 from datetime import timedelta
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, session, Response
 from werkzeug.utils import secure_filename
 import cv2
 import numpy as np
 from dotenv import load_dotenv, find_dotenv
 
+def _verify_caos_origin():
+    """System origin verification watermark"""
+    return "CAOS-BIOGUARD-WEBADMIN-WATERMARK-2026-X79-UNAUTHORIZED-USE-PROHIBITED"
+
 # Add parent directory to path to import managers
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from managers import SyncDatabaseManager, ConfigManager, DatabaseLogHandler
+from managers import SyncDatabaseManager, ConfigManager, DatabaseLogHandler, LocalFaceStore, CloudFaceStore, auto_migrate_local_faces_to_cloud, migrate_cloud_faces_to_local, check_cloud_mode_switch
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Change this in production
@@ -26,14 +30,47 @@ SQLITE_PATH = os.path.join(BASE_DIR, "sideUI", "dd", "records.db")
 FACE_IMAGES_DIR = os.path.join(BASE_DIR, "sideUI", "face_images")
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "web_admin", "uploads")
 
-db_manager = SyncDatabaseManager(database_path=DB_PATH, sqlite_path=SQLITE_PATH)
-# Override face_images_dir to be absolute
+# Use default config (root/config.ini) to ensure consistency with db_manager
+config_manager = ConfigManager()
+
+# 云端→单机模式切换检测：enabled 从 True 变为 False 时，自动反向迁移（MySQL+R2 → 本地 SQLite+目录）
+# 必须在 face_store / db_manager 构造前执行，确保后续用本地后端加载到迁移后的数据
+switched_to_standalone, current_enabled = check_cloud_mode_switch(config_manager)
+if switched_to_standalone:
+    try:
+        cloud_store = CloudFaceStore(config_manager)
+        if migrate_cloud_faces_to_local(config_manager, cloud_store, SQLITE_PATH, FACE_IMAGES_DIR, DB_PATH):
+            config_manager.set_cloud_enabled_last(current_enabled)
+            logging.getLogger(__name__).info("已从云端模式切换为单机模式，人脸数据已自动迁回本地")
+        else:
+            logging.getLogger(__name__).error("云端→单机反向迁移失败，本地保持原状，请检查 [MySQL]/[S3] 配置")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"云端→单机反向迁移异常：{e}")
+else:
+    # 非切换场景：仅同步记录本次状态，避免重复触发
+    config_manager.set_cloud_enabled_last(current_enabled)
+
+# 根据 [Cloud] enabled 选择人脸存储后端：本地 SQLite / 云端 MySQL+R2
+if config_manager.get_cloud_enabled():
+    face_store = CloudFaceStore(config_manager)
+else:
+    face_store = LocalFaceStore(config_manager, SQLITE_PATH, FACE_IMAGES_DIR, DB_PATH)
+
+# 云边分离模式下：云端人脸库为空时，自动把本地 SQLite + 图片目录迁移到云端 MySQL + R2（无需手动操作）
+# 必须在 db_manager 创建前执行，确保内存人脸库加载到迁移后的数据
+if config_manager.get_cloud_enabled():
+    try:
+        auto_migrate_local_faces_to_cloud(
+            config_manager, face_store, SQLITE_PATH, FACE_IMAGES_DIR, DB_PATH
+        )
+    except Exception as e:
+        logging.getLogger(__name__).error(f"人脸数据自动迁移失败，请检查 [MySQL]/[S3] 配置：{e}")
+
+db_manager = SyncDatabaseManager(database_path=DB_PATH, sqlite_path=SQLITE_PATH, face_store=face_store)
+# Override face_images_dir to be absolute (LocalFaceStore 已拿到绝对路径，此处保持属性一致)
 db_manager.face_images_dir = FACE_IMAGES_DIR
 if not os.path.exists(FACE_IMAGES_DIR):
     os.makedirs(FACE_IMAGES_DIR)
-
-# Use default config (root/config.ini) to ensure consistency with db_manager
-config_manager = ConfigManager() 
 # LS showed config.ini in arcface root AND sideUI/config.ini?
 # LS showed:
 # arcface/config.ini
@@ -816,42 +853,13 @@ def toggle_admin(name):
 
 @app.route('/face_image/<name>')
 def face_image(name):
-    """Serve face image"""
+    """Serve face image（统一走 load_face_image，本地/云端后端均可）"""
     device_id = request.args.get('device_id')
-    
-    import os
-    import hashlib
-    
-    def get_paths(dev_id):
-        safe_name = hashlib.md5(name.encode()).hexdigest()
-        safe_dev = hashlib.md5(dev_id.encode()).hexdigest() if dev_id != 'admin' else 'admin'
-        return f"{safe_name}_{safe_dev}.jpg", f"{safe_name}.jpg"
-
-    if device_id:
-        filename, old_filename = get_paths(device_id)
-        if os.path.exists(os.path.join(db_manager.face_images_dir, filename)):
-            return send_from_directory(db_manager.face_images_dir, filename)
-        elif os.path.exists(os.path.join(db_manager.face_images_dir, old_filename)):
-            return send_from_directory(db_manager.face_images_dir, old_filename)
-            
-    # Fallback to search all associated device_ids for this user
-    user_faces = db_manager.database.get(name, [])
-    if isinstance(user_faces, list):
-        for face in user_faces:
-            f_device_id = face.get('device_id', 'admin')
-            filename, old_filename = get_paths(f_device_id)
-            if os.path.exists(os.path.join(db_manager.face_images_dir, filename)):
-                return send_from_directory(db_manager.face_images_dir, filename)
-            elif os.path.exists(os.path.join(db_manager.face_images_dir, old_filename)):
-                return send_from_directory(db_manager.face_images_dir, old_filename)
-                
-    # Final fallback to global
-    filename, old_filename = get_paths('admin')
-    if os.path.exists(os.path.join(db_manager.face_images_dir, filename)):
-        return send_from_directory(db_manager.face_images_dir, filename)
-    elif os.path.exists(os.path.join(db_manager.face_images_dir, old_filename)):
-        return send_from_directory(db_manager.face_images_dir, old_filename)
-        
+    img = db_manager.load_face_image(name, device_id)
+    if img is not None:
+        ok, buffer = cv2.imencode('.jpg', img)
+        if ok:
+            return Response(buffer.tobytes(), mimetype='image/jpeg')
     return "Image not found", 404
 
 @app.route('/face_compare', methods=['GET'])
@@ -1409,11 +1417,21 @@ def api_face_delete(name):
 @app.route('/api/face/sync/all', methods=['GET'])
 def api_face_sync_all():
     """
-    API to provide all faces to clients (Pull).
+    API to provide faces to clients (Pull).
+    支持 device_id 精准下发：传入 device_id 时，仅返回属于该设备的人脸（含 'admin' 全局人脸）。
     """
     try:
         request_device_id = request.args.get('device_id')
         users = []
+
+        def _face_for_device(face_device_id):
+            """判断某条人脸是否属于请求设备（逗号分隔多设备 / 全局 admin）"""
+            if not request_device_id:
+                return True
+            if face_device_id == 'admin':
+                return True
+            device_ids = [d.strip() for d in str(face_device_id).split(',')]
+            return request_device_id in device_ids
         
         # db_manager.database is a dict mapping name to a list of face dicts
         for name, face_list in db_manager.database.items():
@@ -1429,6 +1447,10 @@ def api_face_sync_all():
                 face_device_id = face_data.get('device_id', 'admin')
                 
                 if embedding is None:
+                    continue
+
+                # 云端多设备模式：按 device_id 精准下发，避免人脸库被统一
+                if not _face_for_device(face_device_id):
                     continue
                     
                 # Convert embedding to list for JSON serialization
@@ -1462,6 +1484,76 @@ def api_face_sync_all():
         logger.error(f"Sync Pull Error: {e}")
         return jsonify({'message': str(e)}), 500
 
+@app.route('/api/face/sync/meta', methods=['GET'])
+def api_face_sync_meta():
+    """
+    返回人脸元数据清单（不含 embedding / 图片），用于边缘端对账 diff。
+    返回：[{name, device_id, updated_at}]
+    """
+    try:
+        request_device_id = request.args.get('device_id')
+        meta = db_manager.get_face_meta(request_device_id)
+        return jsonify(meta)
+    except Exception as e:
+        logger.error(f"Sync Meta Error: {e}")
+        return jsonify({'message': str(e)}), 500
+
+@app.route('/api/face/sync/one', methods=['GET'])
+def api_face_sync_one():
+    """
+    按需拉取单条人脸（含 embedding 与图片 base64），供边缘端对账差异拉取。
+    参数：name, device_id
+    返回与 /api/face/sync/all 中单条一致的 JSON。
+    """
+    try:
+        name = request.args.get('name')
+        device_id = request.args.get('device_id')
+        if not name:
+            return jsonify({'message': 'Missing name'}), 400
+
+        face_list = db_manager.database.get(name)
+        if not isinstance(face_list, list):
+            face_list = [face_list] if face_list else []
+
+        target = None
+        for face_data in face_list:
+            fd = face_data.get('device_id', 'admin')
+            if not device_id or fd == device_id:
+                target = face_data
+                break
+
+        if target is None or target.get('embedding') is None:
+            return jsonify({'message': 'Face not found'}), 404
+
+        embedding = target.get('embedding')
+        if isinstance(embedding, np.ndarray):
+            embedding_list = embedding.tolist()
+        else:
+            embedding_list = list(embedding)
+
+        import base64
+        face_image_b64 = None
+        target_device_id = target.get('device_id', 'admin')
+        if db_manager.check_face_image_exists(name, target_device_id):
+            img = db_manager.load_face_image(name, target_device_id)
+            if img is not None:
+                _, buffer = cv2.imencode('.jpg', img)
+                face_image_b64 = base64.b64encode(buffer).decode('utf-8')
+
+        return jsonify({
+            "name": name,
+            "embedding": embedding_list,
+            "groups": target.get('groups', 'all'),
+            "list_type": target.get('list_type', 'white'),
+            "metadata": target.get('metadata', {}),
+            "is_admin": target.get('metadata', {}).get('is_admin', False),
+            "face_image": face_image_b64,
+            "device_id": target_device_id
+        })
+    except Exception as e:
+        logger.error(f"Sync One Error: {e}")
+        return jsonify({'message': str(e)}), 500
+
 if __name__ == '__main__':
     load_dotenv(find_dotenv())
     # context = (r'C:\Users\yang\localhost.pem', r'C:\Users\yang\localhost-key.pem')
@@ -1473,7 +1565,7 @@ if __name__ == '__main__':
     if flask_env == 'development':
         print(f"Starting DEVELOPMENT server on http://0.0.0.0:{flask_port}")
         # app.run(host='0.0.0.0', ssl_context=context, port=flask_port, debug=True)
-        app.run(host='0.0.0.0', port=flask_port, debug=True)
+        app.run(host='0.0.0.0', port=flask_port, debug=True, threaded=True)
     else:   # production
         from waitress import serve
         import logging

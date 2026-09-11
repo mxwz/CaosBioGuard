@@ -16,3 +16,4 @@ psutil
 markdown
 dotenv
 waitress
+boto3
