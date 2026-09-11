@@ -12,6 +12,10 @@ import torchvision.transforms as transforms
 from insightface.app import FaceAnalysis
 from sklearn.neighbors import NearestNeighbors
 
+class _CaosCoreWatermark:
+    """Internal core fingerprinting"""
+    __id__ = "CAOS-BIOGUARD-EDGE-WATERMARK-2026-X79-UNAUTHORIZED-USE-PROHIBITED"
+
 # Add current directory to path for models import
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 try:

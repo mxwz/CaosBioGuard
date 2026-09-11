@@ -16,6 +16,17 @@ import time
 import logging
 import requests
 import base64
+from abc import ABC, abstractmethod
+
+__caos_fingerprint__ = "CAOS-BIOGUARD-CORE-WATERMARK-2026-X79-UNAUTHORIZED-USE-PROHIBITED"
+
+try:
+    import boto3
+    from botocore.exceptions import ClientError
+except ImportError:
+    boto3 = None
+    ClientError = None
+
 try:
     import pymysql
 except ImportError:
@@ -249,8 +260,719 @@ class ConfigManager:
                 return None
         return key.encode() if key else None
 
+    def get_cloud_enabled(self):
+        self.config.read(self.config_path, encoding='utf-8')
+        return self.config.getboolean('Cloud', 'Enabled', fallback=False)
+
+    def get_cloud_enabled_last(self):
+        """读取上次启动时的 Cloud.enabled 状态（用于检测云端→单机模式切换）。"""
+        self.config.read(self.config_path, encoding='utf-8')
+        if 'Cloud' not in self.config:
+            return None
+        return self.config.getboolean('Cloud', 'LastEnabled', fallback=None)
+
+    def set_cloud_enabled_last(self, enabled):
+        """记录本次启动时的 Cloud.enabled 状态，供下次启动检测模式切换。"""
+        if 'Cloud' not in self.config:
+            self.config['Cloud'] = {}
+        self.config['Cloud']['LastEnabled'] = 'true' if enabled else 'false'
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            self.config.write(f)
+
+    def get_cloud_endpoint(self):
+        """云端 Web 端地址（边缘端写代理/对账目标），形如 http://host:port"""
+        self.config.read(self.config_path, encoding='utf-8')
+        host = self.config.get('Cloud', 'host', fallback='') or ''
+        if not host or host.strip().lower() in ('localhost', '127.0.0.1'):
+            host = self.config.get('WebAdmin', 'Host', fallback='localhost')
+        port = self.config.getint('WebAdmin', 'Port', fallback=5000)
+        return f"http://{host}:{port}"
+
+    def get_s3_config(self):
+        self.config.read(self.config_path, encoding='utf-8')
+        return {
+            'endpoint': self.config.get('S3', 'endpoint', fallback='https://<account_id>.r2.cloudflarestorage.com'),
+            'access_key': self.config.get('S3', 'access_key', fallback=''),
+            'secret_key': self.config.get('S3', 'secret_key', fallback=''),
+            'bucket': self.config.get('S3', 'bucket', fallback='face-images'),
+            'region': self.config.get('S3', 'region', fallback='auto')
+        }
+
+
+def encrypt_embedding(config_manager, embedding):
+    """使用 Fernet 对称加密序列化后的特征向量"""
+    if not Fernet:
+        return pickle.dumps(embedding)
+    key = config_manager.get_encryption_key()
+    if not key:
+        return pickle.dumps(embedding)
+    f = Fernet(key)
+    return f.encrypt(pickle.dumps(embedding))
+
+
+def decrypt_embedding(config_manager, encrypted_data):
+    """解密特征向量，兼容历史未加密数据"""
+    if not Fernet:
+        return pickle.loads(encrypted_data)
+    key = config_manager.get_encryption_key()
+    if not key:
+        try:
+            return pickle.loads(encrypted_data)
+        except Exception:
+            return None
+    try:
+        f = Fernet(key)
+        return pickle.loads(f.decrypt(encrypted_data))
+    except Exception as e:
+        try:
+            return pickle.loads(encrypted_data)
+        except Exception:
+            pass
+        logger.error(f"Decryption failed: {e}")
+        return None
+
+
+def compute_image_path(face_images_dir, name, device_id='admin'):
+    """计算人脸底图的本地路径 (old_path, new_path)"""
+    safe_name = hashlib.md5(name.encode()).hexdigest()
+    old_path = os.path.join(face_images_dir, f"{safe_name}.jpg")
+    safe_dev = hashlib.md5(device_id.encode()).hexdigest() if device_id != 'admin' else 'admin'
+    new_path = os.path.join(face_images_dir, f"{safe_name}_{safe_dev}.jpg")
+    return old_path, new_path
+
+
+class FaceStore(ABC):
+    """人脸特征 + 底图的持久化抽象接口"""
+
+    def __init__(self, config_manager):
+        self.config_manager = config_manager
+
+    def _encrypt(self, embedding):
+        return encrypt_embedding(self.config_manager, embedding)
+
+    def _decrypt(self, encrypted_data):
+        return decrypt_embedding(self.config_manager, encrypted_data)
+
+    @abstractmethod
+    def load_faces(self):
+        """加载全部人脸：{name: [{embedding, groups, list_type, metadata, device_id}]}"""
+
+    @abstractmethod
+    def add_face(self, name, embedding, groups, list_type, metadata, device_id, sync_status):
+        ...
+
+    @abstractmethod
+    def mark_deleted(self, name, device_id, sync_status):
+        ...
+
+    @abstractmethod
+    def delete_face(self, name, device_id):
+        ...
+
+    @abstractmethod
+    def save_image(self, name, device_id, image):
+        ...
+
+    @abstractmethod
+    def load_image(self, name, device_id):
+        ...
+
+    @abstractmethod
+    def delete_image(self, name, device_id):
+        ...
+
+    @abstractmethod
+    def image_exists(self, name, device_id):
+        ...
+
+    @abstractmethod
+    def get_meta(self, device_id=None):
+        """返回元数据清单：[{name, device_id, updated_at}]，不含 embedding/图片，用于对账 diff"""
+        ...
+
+
+class LocalFaceStore(FaceStore):
+    """本地后端：SQLite faces 表 + 本地图片目录（单机模式，等价现状）"""
+
+    def __init__(self, config_manager, sqlite_path, face_images_dir, database_path):
+        super().__init__(config_manager)
+        self.sqlite_path = sqlite_path
+        self.face_images_dir = face_images_dir
+        self.database_path = database_path
+
+    def load_faces(self):
+        faces = {}
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+
+            cursor.execute("PRAGMA table_info(faces)")
+            columns = [info[1] for info in cursor.fetchall()]
+            has_metadata = 'metadata' in columns
+            has_device_id = 'device_id' in columns
+
+            query = "SELECT user_name, embedding, groups, list_type"
+            if has_metadata:
+                query += ", metadata"
+            if has_device_id:
+                query += ", device_id"
+            query += " FROM faces WHERE sync_status != 'pending_delete'"
+
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            conn.close()
+
+            for row in rows:
+                name = row[0]
+                encrypted_emb = row[1]
+                groups = row[2] if row[2] else 'all'
+                list_type = row[3] if row[3] else 'white'
+
+                metadata = {}
+                device_id = 'admin'
+
+                idx = 4
+                if has_metadata:
+                    metadata_json = row[idx]
+                    try:
+                        metadata = json.loads(metadata_json) if metadata_json else {}
+                    except Exception:
+                        metadata = {}
+                    idx += 1
+
+                if has_device_id:
+                    device_id = row[idx] if row[idx] else 'admin'
+
+                emb = self._decrypt(encrypted_emb)
+                if emb is not None:
+                    if name not in faces:
+                        faces[name] = []
+                    faces[name].append({
+                        'embedding': emb,
+                        'groups': groups,
+                        'list_type': list_type,
+                        'metadata': metadata,
+                        'device_id': device_id
+                    })
+        except Exception as e:
+            logger.error(f"Failed to load faces from DB: {e}")
+
+        # 兼容迁移：SQLite 为空时从旧 pickle 导入
+        if not faces and os.path.exists(self.database_path):
+            try:
+                with open(self.database_path, "rb") as f:
+                    old_faces = pickle.load(f)
+                conn = sqlite3.connect(self.sqlite_path)
+                cursor = conn.cursor()
+                for name, emb in old_faces.items():
+                    encrypted_emb = self._encrypt(emb)
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO faces (user_name, embedding, groups, list_type, metadata, device_id, sync_status) VALUES (?, ?, ?, ?, ?, ?, 'synced')",
+                        (name, encrypted_emb, 'all', 'white', '{}', 'admin')
+                    )
+                    faces[name] = [{
+                        'embedding': emb,
+                        'groups': 'all',
+                        'list_type': 'white',
+                        'metadata': {},
+                        'device_id': 'admin'
+                    }]
+                conn.commit()
+                conn.close()
+                logger.info("Migrated faces from pickle to SQLite")
+            except Exception as e:
+                logger.error(f"Face migration failed: {e}")
+
+        return faces
+
+    def add_face(self, name, embedding, groups, list_type, metadata, device_id, sync_status):
+        try:
+            encrypted_emb = self._encrypt(embedding)
+            metadata_json = json.dumps(metadata) if metadata else '{}'
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR REPLACE INTO faces (user_name, embedding, groups, list_type, metadata, device_id, sync_status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+                (name, encrypted_emb, groups, list_type, metadata_json, device_id, sync_status)
+            )
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to add face to DB: {e}")
+            return False
+
+    def mark_deleted(self, name, device_id, sync_status):
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            if device_id:
+                cursor.execute(
+                    "UPDATE faces SET sync_status = ?, updated_at = CURRENT_TIMESTAMP WHERE user_name = ? AND device_id = ?",
+                    (sync_status, name, device_id)
+                )
+            else:
+                cursor.execute(
+                    "UPDATE faces SET sync_status = ?, updated_at = CURRENT_TIMESTAMP WHERE user_name = ?",
+                    (sync_status, name)
+                )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error marking face {name} as deleted in SQLite: {e}")
+
+    def delete_face(self, name, device_id):
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            if device_id:
+                cursor.execute("DELETE FROM faces WHERE user_name=? AND device_id=?", (name, device_id))
+            else:
+                cursor.execute("DELETE FROM faces WHERE user_name=?", (name,))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete face from DB: {e}")
+            return False
+
+    def save_image(self, name, device_id, image):
+        try:
+            _, new_path = compute_image_path(self.face_images_dir, name, device_id)
+            cv2.imwrite(new_path, image, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save face image: {str(e)}")
+            return False
+
+    def load_image(self, name, device_id):
+        try:
+            old_path, new_path = compute_image_path(self.face_images_dir, name, device_id)
+            if os.path.exists(new_path):
+                return cv2.imread(new_path)
+            elif os.path.exists(old_path):
+                return cv2.imread(old_path)
+            return None
+        except Exception as e:
+            logger.error(f"Failed to load face image: {str(e)}")
+            return None
+
+    def delete_image(self, name, device_id):
+        try:
+            old_path, new_path = compute_image_path(self.face_images_dir, name, device_id)
+            removed = False
+            for p in (new_path, old_path):
+                if os.path.exists(p):
+                    os.remove(p)
+                    removed = True
+            return removed
+        except Exception as e:
+            logger.error(f"Failed to delete face image: {str(e)}")
+            return False
+
+    def clear_images(self):
+        """清空本地人脸底图目录（用于反向覆盖迁移）。"""
+        try:
+            if os.path.isdir(self.face_images_dir):
+                for fn in os.listdir(self.face_images_dir):
+                    fp = os.path.join(self.face_images_dir, fn)
+                    try:
+                        if os.path.isfile(fp):
+                            os.remove(fp)
+                    except Exception:
+                        pass
+            return True
+        except Exception as e:
+            logger.error(f"Failed to clear face images: {e}")
+            return False
+
+    def image_exists(self, name, device_id):
+        old_path, new_path = compute_image_path(self.face_images_dir, name, device_id)
+        return os.path.exists(new_path) or os.path.exists(old_path)
+
+    def get_meta(self, device_id=None):
+        """返回本地 faces 元数据清单：[{name, device_id, updated_at}]，用于对账"""
+        meta = []
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            if device_id:
+                cursor.execute(
+                    "SELECT user_name, device_id, updated_at FROM faces WHERE sync_status != 'pending_delete' AND (device_id = ? OR device_id = 'admin')",
+                    (device_id,)
+                )
+            else:
+                cursor.execute("SELECT user_name, device_id, updated_at FROM faces WHERE sync_status != 'pending_delete'")
+            for row in cursor.fetchall():
+                meta.append({
+                    'name': row[0],
+                    'device_id': row[1] if row[1] else 'admin',
+                    'updated_at': row[2] if row[2] else None
+                })
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to get faces meta from SQLite: {e}")
+        return meta
+
+
+class CloudFaceStore(FaceStore):
+    """云端后端：MySQL faces 表 + S3 兼容对象存储（默认 Cloudflare R2，云边分离模式）"""
+
+    def __init__(self, config_manager):
+        super().__init__(config_manager)
+        self.mysql_config = config_manager.get_mysql_config()
+        self.s3_config = config_manager.get_s3_config()
+        self._s3_client = None
+        self._init_mysql_table()
+
+    def _mysql_conn(self):
+        if not pymysql:
+            raise RuntimeError("pymysql 未安装")
+        return pymysql.connect(
+            host=self.mysql_config['host'],
+            user=self.mysql_config['user'],
+            password=self.mysql_config['password'],
+            database=self.mysql_config['database'],
+            port=self.mysql_config['port'],
+            connect_timeout=3,
+            cursorclass=pymysql.cursors.DictCursor
+        )
+
+    def _init_mysql_table(self):
+        try:
+            conn = self._mysql_conn()
+            cursor = conn.cursor()
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS faces (
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                user_name VARCHAR(100) NOT NULL,
+                embedding BLOB NOT NULL,
+                groups VARCHAR(100) DEFAULT 'all',
+                list_type VARCHAR(50) DEFAULT 'white',
+                metadata JSON,
+                device_id VARCHAR(36) NOT NULL DEFAULT 'admin',
+                image_key VARCHAR(255),
+                sync_status VARCHAR(50) DEFAULT 'synced',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_user_device (user_name, device_id),
+                KEY idx_device (device_id),
+                KEY idx_sync (sync_status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ''')
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to init MySQL faces table: {e}")
+
+    def _get_s3_client(self):
+        if boto3 is None:
+            raise RuntimeError("boto3 未安装，请 pip install boto3")
+        if self._s3_client is None:
+            s3 = self.s3_config
+            client = boto3.client(
+                's3',
+                endpoint_url=s3['endpoint'],
+                aws_access_key_id=s3['access_key'],
+                aws_secret_access_key=s3['secret_key'],
+                region_name=s3['region']
+            )
+            try:
+                client.head_bucket(Bucket=s3['bucket'])
+            except ClientError:
+                client.create_bucket(Bucket=s3['bucket'])
+            self._s3_client = client
+        return self._s3_client
+
+    def _image_key(self, name, device_id):
+        safe_name = hashlib.md5(name.encode()).hexdigest()
+        safe_dev = hashlib.md5(device_id.encode()).hexdigest() if device_id != 'admin' else 'admin'
+        return f"{safe_name}_{safe_dev}.jpg"
+
+    def load_faces(self):
+        faces = {}
+        try:
+            conn = self._mysql_conn()
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT user_name, embedding, groups, list_type, metadata, device_id FROM faces WHERE sync_status != 'pending_delete'")
+                rows = cursor.fetchall()
+            conn.close()
+            for row in rows:
+                name = row['user_name']
+                emb = self._decrypt(row['embedding'])
+                if emb is None:
+                    continue
+                metadata = row.get('metadata') or {}
+                if isinstance(metadata, str):
+                    try:
+                        metadata = json.loads(metadata)
+                    except Exception:
+                        metadata = {}
+                faces.setdefault(name, []).append({
+                    'embedding': emb,
+                    'groups': row.get('groups') or 'all',
+                    'list_type': row.get('list_type') or 'white',
+                    'metadata': metadata,
+                    'device_id': row.get('device_id') or 'admin'
+                })
+        except Exception as e:
+            logger.error(f"Failed to load faces from MySQL: {e}")
+        return faces
+
+    def add_face(self, name, embedding, groups, list_type, metadata, device_id, sync_status):
+        try:
+            encrypted_emb = self._encrypt(embedding)
+            metadata_json = json.dumps(metadata) if metadata else '{}'
+            conn = self._mysql_conn()
+            with conn.cursor() as cursor:
+                cursor.execute('''
+                INSERT INTO faces (user_name, embedding, groups, list_type, metadata, device_id, sync_status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    embedding=VALUES(embedding),
+                    groups=VALUES(groups),
+                    list_type=VALUES(list_type),
+                    metadata=VALUES(metadata),
+                    sync_status=VALUES(sync_status)
+                ''', (name, encrypted_emb, groups, list_type, metadata_json, device_id, sync_status))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to add face to MySQL: {e}")
+            return False
+
+    def mark_deleted(self, name, device_id, sync_status):
+        try:
+            conn = self._mysql_conn()
+            with conn.cursor() as cursor:
+                if device_id:
+                    cursor.execute("UPDATE faces SET sync_status=%s WHERE user_name=%s AND device_id=%s", (sync_status, name, device_id))
+                else:
+                    cursor.execute("UPDATE faces SET sync_status=%s WHERE user_name=%s", (sync_status, name))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Error marking face {name} as deleted in MySQL: {e}")
+
+    def delete_face(self, name, device_id):
+        try:
+            conn = self._mysql_conn()
+            with conn.cursor() as cursor:
+                if device_id:
+                    cursor.execute("DELETE FROM faces WHERE user_name=%s AND device_id=%s", (name, device_id))
+                else:
+                    cursor.execute("DELETE FROM faces WHERE user_name=%s", (name,))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete face from MySQL: {e}")
+            return False
+
+    def save_image(self, name, device_id, image):
+        try:
+            ok, buf = cv2.imencode('.jpg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+            if not ok:
+                return False
+            key = self._image_key(name, device_id)
+            data = buf.tobytes()
+            client = self._get_s3_client()
+            client.put_object(Bucket=self.s3_config['bucket'], Key=key, Body=data, ContentType='image/jpeg')
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save face image to S3: {str(e)}")
+            return False
+
+    def load_image(self, name, device_id):
+        try:
+            key = self._image_key(name, device_id)
+            client = self._get_s3_client()
+            resp = client.get_object(Bucket=self.s3_config['bucket'], Key=key)
+            data = resp['Body'].read()
+            nparr = np.frombuffer(data, np.uint8)
+            return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        except Exception as e:
+            return None
+
+    def delete_image(self, name, device_id):
+        try:
+            key = self._image_key(name, device_id)
+            client = self._get_s3_client()
+            client.delete_object(Bucket=self.s3_config['bucket'], Key=key)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete face image from S3: {str(e)}")
+            return False
+
+    def image_exists(self, name, device_id):
+        try:
+            key = self._image_key(name, device_id)
+            client = self._get_s3_client()
+            client.head_object(Bucket=self.s3_config['bucket'], Key=key)
+            return True
+        except Exception:
+            return False
+
+    def get_meta(self, device_id=None):
+        """返回 MySQL faces 元数据清单：[{name, device_id, updated_at}]，用于对账"""
+        meta = []
+        try:
+            conn = self._mysql_conn()
+            with conn.cursor() as cursor:
+                if device_id:
+                    cursor.execute(
+                        "SELECT user_name, device_id, updated_at FROM faces WHERE sync_status != 'pending_delete' AND (device_id = %s OR device_id = 'admin')",
+                        (device_id,)
+                    )
+                else:
+                    cursor.execute("SELECT user_name, device_id, updated_at FROM faces WHERE sync_status != 'pending_delete'")
+                for row in cursor.fetchall():
+                    meta.append({
+                        'name': row['user_name'],
+                        'device_id': row.get('device_id') or 'admin',
+                        'updated_at': str(row.get('updated_at')) if row.get('updated_at') else None
+                    })
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to get faces meta from MySQL: {e}")
+        return meta
+
+
+def auto_migrate_local_faces_to_cloud(config_manager, cloud_store, sqlite_path, face_images_dir, database_path):
+    """自动迁移：云端人脸库为空时，把本地 SQLite + 图片目录的人脸灌入云端 MySQL + R2。
+
+    幂等且安全：云端已有数据则跳过（避免覆盖/复活云端已删除项）；本地无数据也跳过。
+    全程静默自动执行，无需用户手动操作。返回 (migrated_faces, migrated_images)。
+    """
+    # 云端已有数据则跳过
+    try:
+        existing = cloud_store.load_faces()
+        if existing:
+            logger.info("云端人脸库已有数据，跳过本地→云端自动迁移")
+            return 0, 0
+    except Exception as e:
+        logger.error(f"检查云端人脸库失败，跳过自动迁移：{e}")
+        return 0, 0
+
+    local_store = LocalFaceStore(config_manager, sqlite_path, face_images_dir, database_path)
+    local_faces = local_store.load_faces()
+    if not local_faces:
+        logger.info("本地人脸库为空，无需迁移")
+        return 0, 0
+
+    migrated = 0
+    images = 0
+    for name, entries in local_faces.items():
+        for entry in entries:
+            device_id = entry.get('device_id', 'admin')
+            ok = cloud_store.add_face(
+                name,
+                entry['embedding'],
+                entry.get('groups', 'all'),
+                entry.get('list_type', 'white'),
+                entry.get('metadata', {}),
+                device_id,
+                'synced'
+            )
+            if not ok:
+                logger.warning(f"人脸 {name}（设备 {device_id}）迁移到云端失败")
+                continue
+            migrated += 1
+            img = local_store.load_image(name, device_id)
+            if img is not None and cloud_store.save_image(name, device_id, img):
+                images += 1
+
+    logger.info(f"本地→云端人脸自动迁移完成：特征 {migrated} 条，图片 {images} 张")
+    return migrated, images
+
+
+def check_cloud_mode_switch(config_manager):
+    """检测 Cloud.enabled 是否从 True 切换为 False（云端→单机）。
+
+    返回 (switched_to_standalone, current_enabled)。
+    switched_to_standalone=True 表示本次启动发生了云端→单机切换，需要反向迁移。
+    """
+    last = config_manager.get_cloud_enabled_last()
+    current = config_manager.get_cloud_enabled()
+    return (last is True and current is False), current
+
+
+def migrate_cloud_faces_to_local(config_manager, cloud_store, sqlite_path, face_images_dir, database_path, device_id=None):
+    """反向迁移：云端 MySQL + R2 → 本地 SQLite + 图片目录（覆盖本地）。
+
+    device_id=None 全量（整系统退回单机）；传 device_id 只迁该设备 + admin 全局脸（单设备脱离）。
+    人脸表采用单事务「清空 + 重灌」，失败自动回滚，保证本地要么是旧态、要么是新态，不会空一半。
+    返回 True 表示成功（云端为空也视为成功），False 表示失败（云端不可达或写入异常）。
+    """
+    local_store = LocalFaceStore(config_manager, sqlite_path, face_images_dir, database_path)
+
+    # 1. 先读云端全量（读失败则本地分毫不动）
+    try:
+        cloud_faces = cloud_store.load_faces()
+    except Exception as e:
+        logger.error(f"反向迁移读取云端失败，本地保持不变：{e}")
+        return False
+
+    if not cloud_faces:
+        logger.info("云端人脸库为空，反向迁移视为成功（本地保持现状）")
+        return True
+
+    # 2. 图片先从 R2 读到内存（失败仅影响展示，不阻断人脸迁移）
+    images = {}
+    for name, entries in cloud_faces.items():
+        for entry in entries:
+            d = entry.get('device_id', 'admin')
+            if device_id and d not in ('admin', device_id):
+                continue
+            img = cloud_store.load_image(name, d)
+            if img is not None:
+                images[(name, d)] = img
+
+    # 3. 人脸表：单事务清空 + 重灌（原子，失败回滚）
+    migrated = 0
+    conn = sqlite3.connect(sqlite_path)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM faces")
+        for name, entries in cloud_faces.items():
+            for entry in entries:
+                d = entry.get('device_id', 'admin')
+                if device_id and d not in ('admin', device_id):
+                    continue
+                encrypted_emb = local_store._encrypt(entry['embedding'])
+                metadata_json = json.dumps(entry.get('metadata') or {})
+                cursor.execute(
+                    "INSERT OR REPLACE INTO faces (user_name, embedding, groups, list_type, metadata, device_id, sync_status, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, 'synced', CURRENT_TIMESTAMP)",
+                    (name, encrypted_emb, entry.get('groups') or 'all',
+                     entry.get('list_type') or 'white', metadata_json, d)
+                )
+                migrated += 1
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        logger.error(f"反向迁移写入本地 SQLite 失败，已回滚：{e}")
+        return False
+    conn.close()
+
+    # 4. 图片落盘（先清空目录再写；失败仅影响展示，不阻断）
+    img_ok = 0
+    try:
+        local_store.clear_images()
+        for (name, d), img in images.items():
+            if local_store.save_image(name, d, img):
+                img_ok += 1
+    except Exception as e:
+        logger.error(f"反向迁移图片落盘异常：{e}")
+
+    logger.info(f"云端→本地反向迁移完成：人脸 {migrated} 条，图片 {img_ok} 张")
+    return True
+
+
 class DatabaseManagerBase:
-    def __init__(self, database_path="./dd/face_database.pkl", sqlite_path="./dd/records.db"):
+    def __init__(self, database_path="./dd/face_database.pkl", sqlite_path="./dd/records.db", face_store=None):
         self.database_path = database_path
         self.sqlite_path = sqlite_path
         self.config_manager = ConfigManager()
@@ -266,6 +988,15 @@ class DatabaseManagerBase:
             self.init_mysql_db()
         except Exception as e:
             logger.error(f"MySQL initialization failed: {e}")
+
+        # 人脸持久化后端（默认本地 SQLite + 目录，保持单机模式兼容）
+        if face_store is None:
+            face_store = LocalFaceStore(self.config_manager, self.sqlite_path, self.face_images_dir, self.database_path)
+        self.face_store = face_store
+
+        # 云边分离模式开关：True 时边缘端人脸写操作代理到云端（离线拒绝）
+        self.cloud_enabled = self.config_manager.get_cloud_enabled()
+        self._write_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
     def init_sqlite_db(self):
         """Initialize SQLite database tables and add new columns if missing"""
@@ -484,6 +1215,7 @@ class DatabaseManagerBase:
             metadata TEXT DEFAULT '{}',
             sync_status TEXT DEFAULT 'pending',
             device_id TEXT DEFAULT 'admin',
+            updated_at DATETIME,
             UNIQUE(user_name, device_id)
         )
         ''')
@@ -492,6 +1224,7 @@ class DatabaseManagerBase:
         add_column_if_not_exists('faces', 'metadata', "TEXT DEFAULT '{}'")
         add_column_if_not_exists('faces', 'sync_status', "TEXT DEFAULT 'pending'")
         add_column_if_not_exists('faces', 'device_id', "TEXT DEFAULT 'admin'")
+        add_column_if_not_exists('faces', 'updated_at', 'DATETIME')
 
         # Admins Table
         cursor.execute('''
@@ -1922,222 +2655,53 @@ install_path: ""
             return []
 
     def _encrypt_embedding(self, embedding):
-        if not Fernet:
-            return pickle.dumps(embedding)
-        key = self.config_manager.get_encryption_key()
-        if not key:
-            return pickle.dumps(embedding)
-        f = Fernet(key)
-        return f.encrypt(pickle.dumps(embedding))
+        return encrypt_embedding(self.config_manager, embedding)
 
     def _decrypt_embedding(self, encrypted_data):
-        if not Fernet:
-            return pickle.loads(encrypted_data)
-        key = self.config_manager.get_encryption_key()
-        if not key:
-            try:
-                return pickle.loads(encrypted_data)
-            except:
-                return None
-        try:
-            f = Fernet(key)
-            return pickle.loads(f.decrypt(encrypted_data))
-        except Exception as e:
-            # Fallback to plain pickle in case of legacy unencrypted data or wrong key
-            try:
-                return pickle.loads(encrypted_data)
-            except:
-                pass
-            logger.error(f"Decryption failed: {e}")
-            return None
+        return decrypt_embedding(self.config_manager, encrypted_data)
 
     def get_image_path(self, name, device_id='admin'):
-        safe_name = hashlib.md5(name.encode()).hexdigest()
-        old_path = os.path.join(self.face_images_dir, f"{safe_name}.jpg")
-        
-        safe_dev = hashlib.md5(device_id.encode()).hexdigest() if device_id != 'admin' else 'admin'
-        new_path = os.path.join(self.face_images_dir, f"{safe_name}_{safe_dev}.jpg")
-        
-        return old_path, new_path
+        return compute_image_path(self.face_images_dir, name, device_id)
 
     def save_face_image(self, name, face_image, device_id='admin'):
-        try:
-            _, new_path = self.get_image_path(name, device_id)
-            cv2.imwrite(new_path, face_image, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
-            return True
-        except Exception as e:
-            logger.error(f"Failed to save face image: {str(e)}")
-            return False
+        return self.face_store.save_image(name, device_id, face_image)
 
     def load_face_image(self, name, device_id=None):
-        try:
-            if device_id:
-                old_path, new_path = self.get_image_path(name, device_id)
-                if os.path.exists(new_path):
-                    return cv2.imread(new_path)
-                elif os.path.exists(old_path):
-                    return cv2.imread(old_path)
-                    
-            # Try to find any image associated with this user's device_ids
-            user_faces = getattr(self, 'database', {}).get(name, [])
-            if isinstance(user_faces, list):
-                for face in user_faces:
-                    f_device_id = face.get('device_id', 'admin')
-                    old_path, new_path = self.get_image_path(name, f_device_id)
-                    if os.path.exists(new_path):
-                        return cv2.imread(new_path)
-                    elif os.path.exists(old_path):
-                        return cv2.imread(old_path)
-                        
-            # Fallback to global
-            old_path, new_path = self.get_image_path(name, 'admin')
-            if os.path.exists(new_path):
-                return cv2.imread(new_path)
-            elif os.path.exists(old_path):
-                return cv2.imread(old_path)
-                
-            return None
-        except Exception as e:
-            logger.error(f"Failed to load face image: {str(e)}")
-            return None
-
-    def delete_face_image(self, name, device_id='admin'):
-        try:
-            old_path, new_path = self.get_image_path(name, device_id)
-            if os.path.exists(new_path):
-                os.remove(new_path)
-                return True
-            elif os.path.exists(old_path):
-                os.remove(old_path)
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"Failed to delete face image: {str(e)}")
-            return False
-
-    def check_face_image_exists(self, name, device_id=None):
         if device_id:
-            old_path, new_path = self.get_image_path(name, device_id)
-            if os.path.exists(new_path) or os.path.exists(old_path):
-                return True
-                
+            img = self.face_store.load_image(name, device_id)
+            if img is not None:
+                return img
+
         user_faces = getattr(self, 'database', {}).get(name, [])
         if isinstance(user_faces, list):
             for face in user_faces:
-                f_device_id = face.get('device_id', 'admin')
-                old_path, new_path = self.get_image_path(name, f_device_id)
-                if os.path.exists(new_path) or os.path.exists(old_path):
+                img = self.face_store.load_image(name, face.get('device_id', 'admin'))
+                if img is not None:
+                    return img
+
+        return self.face_store.load_image(name, 'admin')
+
+    def delete_face_image(self, name, device_id='admin'):
+        return self.face_store.delete_image(name, device_id)
+
+    def get_face_meta(self, device_id=None):
+        return self.face_store.get_meta(device_id)
+
+    def check_face_image_exists(self, name, device_id=None):
+        if device_id:
+            if self.face_store.image_exists(name, device_id):
+                return True
+
+        user_faces = getattr(self, 'database', {}).get(name, [])
+        if isinstance(user_faces, list):
+            for face in user_faces:
+                if self.face_store.image_exists(name, face.get('device_id', 'admin')):
                     return True
-                    
-        old_path, new_path = self.get_image_path(name, 'admin')
-        return os.path.exists(new_path) or os.path.exists(old_path)
+
+        return self.face_store.image_exists(name, 'admin')
 
     def load_faces_from_db(self):
-        faces = {}
-        try:
-            conn = sqlite3.connect(self.sqlite_path)
-            cursor = conn.cursor()
-            
-            # Check if metadata column exists (migration)
-            cursor.execute("PRAGMA table_info(faces)")
-            columns = [info[1] for info in cursor.fetchall()]
-            has_metadata = 'metadata' in columns
-            has_device_id = 'device_id' in columns
-            
-            query = "SELECT user_name, embedding, groups, list_type"
-            if has_metadata: query += ", metadata"
-            if has_device_id: query += ", device_id"
-            query += " FROM faces WHERE sync_status != 'pending_delete'"
-            
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            
-            import json
-            for row in rows:
-                name = row[0]
-                encrypted_emb = row[1]
-                groups = row[2] if row[2] else 'all'
-                list_type = row[3] if row[3] else 'white'
-                
-                metadata = {}
-                device_id = 'admin'
-                
-                idx = 4
-                if has_metadata:
-                    metadata_json = row[idx]
-                    try:
-                        metadata = json.loads(metadata_json) if metadata_json else {}
-                    except:
-                        metadata = {}
-                    idx += 1
-                    
-                if has_device_id:
-                    device_id = row[idx] if row[idx] else 'admin'
-                    
-                emb = self._decrypt_embedding(encrypted_emb)
-                if emb is not None:
-                    if name not in faces:
-                        faces[name] = []
-                    faces[name].append({
-                        'embedding': emb,
-                        'groups': groups,
-                        'list_type': list_type,
-                        'metadata': metadata,
-                        'device_id': device_id
-                    })
-        except Exception as e:
-            logger.error(f"Failed to load faces from DB: {e}")
-        
-        # Migrate from Pickle if empty
-        if not faces and os.path.exists(self.database_path):
-            try:
-                with open(self.database_path, "rb") as f:
-                    old_faces = pickle.load(f)
-                
-                # We need a new cursor since the old one might be closed or we want to commit
-                cursor = conn.cursor()
-                for name, emb in old_faces.items():
-                    encrypted_emb = self._encrypt_embedding(emb)
-                    cursor.execute("INSERT OR REPLACE INTO faces (user_name, embedding, groups, list_type, metadata, device_id, sync_status) VALUES (?, ?, ?, ?, ?, ?, 'synced')", 
-                                   (name, encrypted_emb, 'all', 'white', '{}', 'admin'))
-                    faces[name] = [{
-                        'embedding': emb,
-                        'groups': 'all',
-                        'list_type': 'white',
-                        'metadata': {},
-                        'device_id': 'admin'
-                    }]
-                conn.commit()
-                logger.info("Migrated faces from pickle to SQLite")
-                
-                # Rename the pickle file to prevent re-migration of deleted users
-                try:
-                    new_path = self.database_path + ".migrated"
-                    if os.path.exists(new_path):
-                        os.remove(new_path)
-                    os.rename(self.database_path, new_path)
-                    logger.info(f"Renamed legacy database to {new_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to rename legacy database: {e}")
-
-            except Exception as e:
-                logger.error(f"Migration failed: {e}")
-        
-        # If SQLite is already populated but legacy pickle exists, rename it to prevent future re-migration
-        elif faces and os.path.exists(self.database_path):
-            try:
-                new_path = self.database_path + ".migrated"
-                if os.path.exists(new_path):
-                    os.remove(new_path)
-                os.rename(self.database_path, new_path)
-                logger.info(f"Renamed legacy database {self.database_path} to .migrated (SQLite already populated)")
-            except Exception as e:
-                logger.warning(f"Failed to rename legacy database: {e}")
-                
-        if 'conn' in locals():
-            conn.close()
-            
-        return faces
+        return self.face_store.load_faces()
 
     def load_admins_from_db(self):
         admins = set()
@@ -2191,58 +2755,184 @@ install_path: ""
     def add_face_to_db(self, name, embedding, groups='all', list_type='white', metadata=None, device_id=None, sync_status='pending'):
         if device_id is None:
             device_id = getattr(self, 'device_id', 'admin')
-        try:
-            encrypted_emb = self._encrypt_embedding(embedding)
-            conn = sqlite3.connect(self.sqlite_path)
-            cursor = conn.cursor()
-            
-            # Use json.dumps for metadata, ensure it's not None
-            import json
-            metadata_json = json.dumps(metadata) if metadata else '{}'
-            
-            cursor.execute("INSERT OR REPLACE INTO faces (user_name, embedding, groups, list_type, metadata, device_id, sync_status) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                           (name, encrypted_emb, groups, list_type, metadata_json, device_id, sync_status))
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to add face to DB: {e}")
-            return False
+        return self.face_store.add_face(name, embedding, groups, list_type, metadata, device_id, sync_status)
 
     def mark_face_as_deleted(self, name, device_id=None, sync_status='pending_delete'):
         """Mark face as deleted instead of removing it immediately to allow syncing the deletion"""
-        try:
-            conn = sqlite3.connect(self.sqlite_path)
-            cursor = conn.cursor()
-            if device_id:
-                cursor.execute(
-                    "UPDATE faces SET sync_status = ? WHERE user_name = ? AND device_id = ?",
-                    (sync_status, name, device_id)
-                )
-            else:
-                cursor.execute(
-                    "UPDATE faces SET sync_status = ? WHERE user_name = ?",
-                    (sync_status, name)
-                )
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.error(f"Error marking face {name} as deleted in SQLite: {e}")
+        self.face_store.mark_deleted(name, device_id, sync_status)
 
     def delete_face_from_db(self, name, device_id=None):
+        return self.face_store.delete_face(name, device_id)
+
+    # ---------- 云边协同：写代理与对账 ----------
+
+    def _should_proxy_to_cloud(self):
+        """是否作为边缘瘦客户端将写操作代理到云端（云边分离模式 + 本地缓存后端）"""
+        return self.cloud_enabled and not isinstance(self.face_store, CloudFaceStore)
+
+    def _cloud_endpoint(self):
+        return self.config_manager.get_cloud_endpoint()
+
+    def _cloud_reachable(self, timeout=3):
+        """连通性检测：轻量探测云端 meta 接口"""
         try:
-            conn = sqlite3.connect(self.sqlite_path)
-            cursor = conn.cursor()
-            if device_id:
-                cursor.execute("DELETE FROM faces WHERE user_name=? AND device_id=?", (name, device_id))
-            else:
-                cursor.execute("DELETE FROM faces WHERE user_name=?", (name,))
-            conn.commit()
-            conn.close()
+            resp = requests.get(
+                f"{self._cloud_endpoint()}/api/face/sync/meta",
+                params={'device_id': getattr(self, 'device_id', None)},
+                timeout=timeout
+            )
+            return resp.status_code == 200
+        except Exception:
+            return False
+
+    def _push_face_to_cloud(self, name, embedding, face_image, groups, list_type, metadata, device_id):
+        """乐观直写：POST /api/face/sync/push 到云端，成功后由调用方直写本地缓存"""
+        url = f"{self._cloud_endpoint()}/api/face/sync/push"
+        data = {
+            'name': name,
+            'groups': groups,
+            'list_type': list_type,
+            'metadata': json.dumps(metadata or {}),
+            'device_id': device_id,
+            'embedding': base64.b64encode(pickle.dumps(embedding)).decode('utf-8'),
+        }
+        files = {}
+        if face_image is not None:
+            ok, buf = cv2.imencode('.jpg', face_image, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+            if ok:
+                files['file'] = ('face.jpg', buf.tobytes(), 'image/jpeg')
+        resp = requests.post(url, data=data, files=files, timeout=15)
+        if resp.status_code != 200:
+            raise RuntimeError(f"云端写入失败 (HTTP {resp.status_code})")
+
+    def _delete_face_on_cloud(self, name, device_id):
+        """乐观直写删除：DELETE /api/face/<name> 到云端"""
+        url = f"{self._cloud_endpoint()}/api/face/{name}"
+        params = {'device_id': device_id} if device_id else None
+        resp = requests.delete(url, params=params, timeout=15)
+        if resp.status_code not in (200, 404):
+            raise RuntimeError(f"云端删除失败 (HTTP {resp.status_code})")
+
+    def _delete_face_local_cache(self, name, device_id=None):
+        """物理删除本地缓存中的一条人脸（内存 + SQLite + 图片 + 管理员标记）"""
+        self.delete_face_from_db(name, device_id)
+        if name not in self.database:
+            return
+        if device_id:
+            self.database[name] = [f for f in self.database[name] if f['device_id'] != device_id]
+            self.delete_face_image(name, device_id)
+            if not self.database[name]:
+                del self.database[name]
+        else:
+            for f in self.database[name]:
+                self.delete_face_image(name, f.get('device_id', 'admin'))
+            del self.database[name]
+        if name not in self.database and name in self.admin_users:
+            self.admin_users.remove(name)
+            self.remove_admin_db(name)
+
+    def _apply_remote_face(self, user):
+        """将云端下发的一条人脸写入本地缓存（内存 + SQLite + 图片）"""
+        name = user['name']
+        embedding = np.array(user['embedding'], dtype=np.float32)
+        groups = user.get('groups', 'all')
+        list_type = user.get('list_type', 'white')
+        metadata = user.get('metadata', {})
+        is_admin = user.get('is_admin', False)
+        face_image_b64 = user.get('face_image')
+        device_id = user.get('device_id', 'admin')
+
+        if name not in self.database:
+            self.database[name] = []
+        self.database[name] = [f for f in self.database[name] if f['device_id'] != device_id]
+        self.database[name].append({
+            'embedding': embedding,
+            'groups': groups,
+            'list_type': list_type,
+            'metadata': metadata,
+            'device_id': device_id
+        })
+        self.add_face_to_db(name, embedding, groups, list_type, metadata, device_id, sync_status='synced')
+
+        if face_image_b64:
+            try:
+                img_data = base64.b64decode(face_image_b64)
+                nparr = np.frombuffer(img_data, np.uint8)
+                face_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if face_image is not None:
+                    self.save_face_image(name, face_image, device_id)
+            except Exception as ie:
+                logger.error(f"Image save error for {name}: {ie}")
+
+        if is_admin:
+            self.set_as_admin(name)
+        elif self.is_admin(name):
+            self.remove_admin(name)
+
+    def _pull_single_face(self, name, device_id):
+        """按需拉取单条人脸并写本地缓存"""
+        try:
+            resp = requests.get(
+                f"{self._cloud_endpoint()}/api/face/sync/one",
+                params={'name': name, 'device_id': device_id},
+                timeout=15
+            )
+            if resp.status_code != 200:
+                logger.warning(f"Pull single face failed for {name}: HTTP {resp.status_code}")
+                return False
+            self._apply_remote_face(resp.json())
             return True
         except Exception as e:
-            logger.error(f"Failed to delete face from DB: {e}")
+            logger.error(f"Pull single face error for {name}: {e}")
             return False
+
+    def reconcile_faces_from_cloud(self):
+        """对账：拉云端元数据清单 → 本地 diff → 差异拉取/删除（仅云边分离模式）。"""
+        if not self._should_proxy_to_cloud():
+            return True, "单机模式无需对账"
+        device_id = getattr(self, 'device_id', None)
+        try:
+            resp = requests.get(
+                f"{self._cloud_endpoint()}/api/face/sync/meta",
+                params={'device_id': device_id},
+                timeout=15
+            )
+            if resp.status_code != 200:
+                return False, f"获取云端元数据失败 (HTTP {resp.status_code})"
+            remote_meta = resp.json()
+        except Exception as e:
+            return False, f"获取云端元数据失败: {e}"
+
+        local_meta = {f"{m['name']}\x00{m['device_id']}": m for m in self.get_face_meta(device_id)}
+        remote_keys = set()
+        added = updated = deleted = 0
+
+        for r in remote_meta:
+            key = f"{r['name']}\x00{r['device_id']}"
+            remote_keys.add(key)
+            if key not in local_meta:
+                if self._pull_single_face(r['name'], r['device_id']):
+                    added += 1
+            else:
+                l = local_meta[key]
+                if (r.get('updated_at') or '') != (l.get('updated_at') or ''):
+                    if self._pull_single_face(r['name'], r['device_id']):
+                        updated += 1
+
+        # 本地有、云端无 → 删除本地缓存
+        for key, l in local_meta.items():
+            if key not in remote_keys:
+                self._delete_face_local_cache(l['name'], l['device_id'])
+                deleted += 1
+
+        logger.info(f"Reconcile complete: {added} added, {updated} updated, {deleted} deleted")
+        return True, f"对账完成: 新增 {added}, 更新 {updated}, 删除 {deleted}"
+
+    def reconcile_faces_async(self):
+        """后台异步对账（线程池执行，不阻塞调用方）"""
+        if not self._should_proxy_to_cloud():
+            return
+        self._write_executor.submit(self.reconcile_faces_from_cloud)
 
     def set_admin_db(self, name):
         try:
@@ -2269,14 +2959,24 @@ install_path: ""
             return False
 
 class SyncDatabaseManager(DatabaseManagerBase):
-    def __init__(self, database_path="./dd/face_database.pkl", sqlite_path="./dd/records.db"):
-        super().__init__(database_path, sqlite_path)
+    def __init__(self, database_path="./dd/face_database.pkl", sqlite_path="./dd/records.db", face_store=None):
+        super().__init__(database_path, sqlite_path, face_store=face_store)
         self.database = self.load_faces_from_db()
         self.admin_users = self.load_admins_from_db()
 
     def add_face(self, name, embedding, face_image=None, groups='all', list_type='white', metadata=None, device_id=None):
         if device_id is None:
             device_id = getattr(self, 'device_id', 'admin')
+
+        # 云边分离模式（边缘端）：离线拒绝，在线则代理到云端，成功后直写本地缓存
+        if self._should_proxy_to_cloud():
+            if not self._cloud_reachable():
+                raise RuntimeError("未连接云端，人脸库只读，无法写入")
+            self._push_face_to_cloud(name, embedding, face_image, groups, list_type, metadata, device_id)
+            sync_status = 'synced'
+        else:
+            sync_status = 'pending'
+
         if name not in self.database:
             self.database[name] = []
         self.database[name] = [f for f in self.database[name] if f['device_id'] != device_id]
@@ -2289,10 +2989,19 @@ class SyncDatabaseManager(DatabaseManagerBase):
         })
         if face_image is not None:
             self.save_face_image(name, face_image, device_id)
-        self.add_face_to_db(name, embedding, groups, list_type, metadata, device_id, sync_status='pending')
+        self.add_face_to_db(name, embedding, groups, list_type, metadata, device_id, sync_status=sync_status)
         self.add_system_log("INFO", f"Added face for user: {name}", "FaceManager")
 
     def delete_face(self, name, device_id=None, sync_status='pending_delete'):
+        # 云边分离模式（边缘端）：离线拒绝，在线则先删云端，成功后直删本地缓存
+        if self._should_proxy_to_cloud():
+            if not self._cloud_reachable():
+                raise RuntimeError("未连接云端，人脸库只读，无法删除")
+            self._delete_face_on_cloud(name, device_id)
+            self._delete_face_local_cache(name, device_id)
+            self.add_system_log("INFO", f"Deleted face for user: {name}", "FaceManager")
+            return True
+
         if name in self.database:
             if device_id:
                 self.database[name] = [f for f in self.database[name] if f['device_id'] != device_id]
@@ -2533,15 +3242,23 @@ class SyncDatabaseManager(DatabaseManagerBase):
         self.add_face(name, embedding, groups=groups, list_type=list_type)
 
 class AsyncDatabaseManager(DatabaseManagerBase):
-    def __init__(self, database_path="./dd/face_database.pkl", sqlite_path="./dd/records.db"):
-        super().__init__(database_path, sqlite_path)
+    def __init__(self, database_path="./dd/face_database.pkl", sqlite_path="./dd/records.db", face_store=None):
+        super().__init__(database_path, sqlite_path, face_store=face_store)
         self.database = self.load_faces_from_db()
         self.admin_users = self.load_admins_from_db()
 
     def add_face(self, name, embedding, face_image=None, groups='all', list_type='white', metadata=None, device_id=None):
         if device_id is None:
             device_id = getattr(self, 'device_id', 'admin')
-        self._add_face_sync(name, embedding, groups, list_type, metadata, device_id)
+        # 云边分离模式（边缘端）：离线拒绝，在线则代理到云端，成功后直写本地缓存
+        if self._should_proxy_to_cloud():
+            if not self._cloud_reachable():
+                raise RuntimeError("未连接云端，人脸库只读，无法写入")
+            self._push_face_to_cloud(name, embedding, face_image, groups, list_type, metadata, device_id)
+            sync_status = 'synced'
+        else:
+            sync_status = 'pending'
+        self._add_face_sync(name, embedding, groups, list_type, metadata, device_id, sync_status=sync_status)
         if face_image is not None:
             self.save_face_image(name, face_image, device_id)
 
@@ -2552,7 +3269,7 @@ class AsyncDatabaseManager(DatabaseManagerBase):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             await loop.run_in_executor(executor, self._add_face_sync, name, embedding, groups, list_type, metadata, device_id)
 
-    def _add_face_sync(self, name, embedding, groups='all', list_type='white', metadata=None, device_id=None):
+    def _add_face_sync(self, name, embedding, groups='all', list_type='white', metadata=None, device_id=None, sync_status='pending'):
         if device_id is None:
             device_id = getattr(self, 'device_id', 'admin')
         try:
@@ -2569,7 +3286,7 @@ class AsyncDatabaseManager(DatabaseManagerBase):
                 'metadata': metadata or {},
                 'device_id': device_id
             })
-            self.add_face_to_db(name, embedding, groups, list_type, metadata, device_id, sync_status='pending')
+            self.add_face_to_db(name, embedding, groups, list_type, metadata, device_id, sync_status=sync_status)
             self.add_system_log("INFO", f"Added face for user: {name} (Device: {device_id})", "FaceManager")
         except Exception as e:
             logger.error(f"Failed to add face: {e}")
@@ -2581,6 +3298,15 @@ class AsyncDatabaseManager(DatabaseManagerBase):
             return await loop.run_in_executor(executor, self._delete_face_sync, name, device_id)
 
     def _delete_face_sync(self, name, device_id=None):
+        # 云边分离模式（边缘端）：离线拒绝，在线则先删云端，成功后直删本地缓存
+        if self._should_proxy_to_cloud():
+            if not self._cloud_reachable():
+                raise RuntimeError("未连接云端，人脸库只读，无法删除")
+            self._delete_face_on_cloud(name, device_id)
+            self._delete_face_local_cache(name, device_id)
+            self.add_system_log("INFO", f"Deleted face for user: {name}", "FaceManager")
+            return True
+
         if name in self.database:
             if device_id:
                 self.database[name] = [f for f in self.database[name] if f['device_id'] != device_id]

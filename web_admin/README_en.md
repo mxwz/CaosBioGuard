@@ -82,5 +82,4 @@ python web_admin/app.py
 
 ## 📄 License & Authorization
 
-The server code is open-sourced under the **[GNU AGPLv3](LICENSE)** license.
-**Core Constraint**: If you use this Web Server for commercial purposes or deploy it on the network to provide SaaS services, you **MUST** open-source your entire commercial system under the AGPLv3 license. For closed-source commercial use, please contact the original author to obtain a commercial license.
+The server code is open-sourced under the **[Apache License 2.0](LICENSE)** license. You are free to use, modify, and distribute this project, provided you comply with the terms of the license.

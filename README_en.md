@@ -85,22 +85,20 @@ We welcome developers to submit Issues or Pull Requests to improve this project 
 
 ---
 
-## 📄 License & Dual Licensing
+## 📄 License
 
-This project adopts a **Dual Licensing** model:
+This project is open-sourced under the **[Apache License 2.0](LICENSE)**. You are free to use, modify, and distribute this project, provided you comply with the terms of the license.
 
-1. **Open Source & Personal Learning (AGPL-3.0 / GPL-3.0)**
-   The overall server is open-sourced under [GNU AGPLv3](LICENSE), and the edge UI independently uses [GNU GPLv3](sideUI/LICENSE). You can use it freely under these agreements.
-   > ⚠️ **Note**: Both licenses are highly infectious. If used commercially or deployed as a service, **you must open-source your commercial system's code**.
+> ⚠️ **Note**: The edge UI of this project depends on `PySide6`, which is licensed under LGPLv3. When distributing commercially, please ensure you comply with the relevant dynamic linking and open-source obligations of LGPLv3.
 
-2. **Closed-Source Commercial License**
-   If you wish to use this project commercially, package it into closed hardware/SaaS, and **do not want to open-source your code**, you **MUST** contact the author for a commercial license.
+### ⚠️ Strict Disclaimer & Terms of Use
 
-### ⚠️ Strict Disclaimer
+Please read the full **[DISCLAIMER.md](DISCLAIMER.md)** file. Core summary below:
 
-1. **Biometric Privacy & Legal Boundaries**: Facial data is highly sensitive. This project is for technical verification only. **Users must ensure full compliance with local privacy laws** (e.g., GDPR, PIPL).
-2. **Pre-trained Model Restrictions**: The underlying `InsightFace` models are typically **for non-commercial/academic use only**.
-3. **Limitation of Liability**: The author bears NO responsibility for any direct/indirect economic losses or legal disputes arising from unauthorized commercial or illegal use.
+1. **Intended Use**: This project is for **personal research** and engineering verification. It is not an out-of-the-box commercial product.
+2. **Disclaimer of Liability**: The author bears **NO responsibility** for any direct or indirect losses (including data breaches, business interruption, etc.) arising from the use of this software. The software is provided "AS IS".
+3. **Prohibited Behaviors**: It is **prohibited** to use this software for any illegal activities (e.g., unauthorized surveillance); it is **prohibited** to remove the copyright and trademark notices from the project.
+4. **Biometric Privacy**: Users **must** ensure full compliance with local privacy laws (e.g., GDPR, PIPL) during actual deployment.
 
 ---
 

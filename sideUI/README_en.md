@@ -60,7 +60,7 @@ As the "Sensory Terminal" of the system, the **Edge Device** is deployed at phys
 
 ## 📄 License & Authorization
 
-The core edge code (including UI and local inference logic) is open-sourced under the **[GNU GPLv3](LICENSE)** license.
-Due to the use of `PySide6` (LGPLv3), to ensure the purity of the open-source ecosystem:
-*   **Personal/Educational Use**: Completely free.
-*   **Commercial Distribution Restrictions**: If you package this program into standalone software (e.g., `.exe`) or flash it into hardware devices for external sales, you **MUST** open-source your complete modified system code. To bypass open-source obligations for closed-source commercial sales, please contact the original author for a commercial license.
+The core edge code (including UI and local inference logic) is open-sourced under the **[Apache License 2.0](LICENSE)** license.
+
+Due to the use of `PySide6` (LGPLv3), when distributing commercially, please note:
+*   If you package this program into standalone software (e.g., `.exe`) or flash it into hardware devices for external sales, please ensure you comply with the open-source obligations of LGPLv3 regarding dynamic linking and user-replaceable libraries.
