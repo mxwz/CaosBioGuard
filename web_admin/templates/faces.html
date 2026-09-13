@@ -175,16 +175,22 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="device_id" class="form-label">所属设备</label>
-                        <select class="form-select" id="device_id" name="device_id">
-                            <option value="admin" {% if selected_device == 'admin' %}selected{% endif %}>管理员 (Admin)</option>
+                        <label class="form-label d-block">所属设备（可多选）</label>
+                        <div class="border rounded p-2" style="max-height: 180px; overflow-y: auto;">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="device_id" value="admin" id="device_admin" checked onchange="onAdminDeviceSelect()">
+                                <label class="form-check-label" for="device_admin">全局 (所有设备)</label>
+                            </div>
                             {% for device in cloud_devices %}
-                            <option value="{{ device.device_id }}" {% if selected_device == device.device_id %}selected{% endif %}>
-                                {{ device.device_id[:8] }}... ({{ device.machine_code[:8] }})
-                            </option>
+                            <div class="form-check">
+                                <input class="form-check-input device-checkbox" type="checkbox" name="device_id" value="{{ device.device_id }}" id="device_{{ loop.index }}" onchange="onSpecificDeviceSelect()">
+                                <label class="form-check-label" for="device_{{ loop.index }}">
+                                    {{ device.device_id[:8] }}... ({{ device.machine_code[:8] }})
+                                </label>
+                            </div>
                             {% endfor %}
-                        </select>
-                        <small class="text-muted">选择此人脸授权的边缘设备，"全局"表示所有设备均可同步。</small>
+                        </div>
+                        <small class="text-muted">勾选“全局”则所有设备可用；也可勾选多个具体设备，为每个设备分别登记一条记录。</small>
                     </div>
                     
                     <div class="mb-3">
@@ -236,7 +242,7 @@
             <form action="{{ url_for('edit_face') }}" method="post">
                 <div class="modal-body">
                     <input type="hidden" name="name" id="settings_name">
-                    <input type="hidden" name="device_id" id="settings_device_id">
+                    <input type="hidden" name="old_device_id" id="settings_device_id">
                     
                     <div class="mb-3">
                         <label class="form-label fw-bold">分组设置</label>
@@ -294,6 +300,46 @@
     document.addEventListener('DOMContentLoaded', function() {
         updateFormFields();
     });
+
+    function onAdminDeviceSelect() {
+        // 勾选“全局”时清空所有具体设备
+        const adminEl = document.getElementById('device_admin');
+        const deviceChecks = document.querySelectorAll('.device-checkbox');
+        if (adminEl && adminEl.checked) {
+            deviceChecks.forEach(cb => cb.checked = false);
+        }
+    }
+
+    function onSpecificDeviceSelect() {
+        // 勾选任一具体设备时取消“全局”
+        const adminEl = document.getElementById('device_admin');
+        const deviceChecks = document.querySelectorAll('.device-checkbox');
+        let anyChecked = false;
+        deviceChecks.forEach(cb => { if (cb.checked) anyChecked = true; });
+        if (anyChecked && adminEl) {
+            adminEl.checked = false;
+        }
+    }
+
+    function onEditAdminDeviceSelect() {
+        // 编辑弹窗：勾选“全局”时清空所有具体设备
+        const adminEl = document.getElementById('edit_device_admin');
+        const deviceChecks = document.querySelectorAll('.edit-device-checkbox');
+        if (adminEl && adminEl.checked) {
+            deviceChecks.forEach(cb => cb.checked = false);
+        }
+    }
+
+    function onEditSpecificDeviceSelect() {
+        // 编辑弹窗：勾选任一具体设备时取消“全局”
+        const adminEl = document.getElementById('edit_device_admin');
+        const deviceChecks = document.querySelectorAll('.edit-device-checkbox');
+        let anyChecked = false;
+        deviceChecks.forEach(cb => { if (cb.checked) anyChecked = true; });
+        if (anyChecked && adminEl) {
+            adminEl.checked = false;
+        }
+    }
 
     function updateFormFields() {
         // Determine which templates to show based on checkboxes
@@ -516,17 +562,24 @@
         tabsHtml += `</ul>
             <form id="editFaceForm" action="{{ url_for('edit_face') }}" method="post">
                 <input type="hidden" name="name" value="${name}">
+                <input type="hidden" name="old_device_id" value="${device_id}">
                 
                 <div class="mb-3 p-2 border rounded bg-light">
-                    <label class="form-label fw-bold">所属设备</label>
-                    <select class="form-select form-select-sm" name="device_id" ${!canEdit ? 'disabled' : ''}>
-                        <option value="global" ${device_id === 'global' ? 'selected' : ''}>全局 (Global)</option>
+                    <label class="form-label fw-bold">所属设备（可多选）</label>
+                    <div class="border rounded p-2" style="max-height: 160px; overflow-y: auto;">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="device_id" value="admin" id="edit_device_admin" ${device_id === 'admin' ? 'checked' : ''} ${!canEdit ? 'disabled' : ''} onchange="onEditAdminDeviceSelect()">
+                            <label class="form-check-label" for="edit_device_admin">全局 (所有设备)</label>
+                        </div>
                         {% for device in cloud_devices %}
-                        <option value="{{ device.device_id }}" ${device_id === '{{ device.device_id }}' ? 'selected' : ''}>
-                            {{ device.device_id[:8] }}... ({{ device.machine_code[:8] }})
-                        </option>
+                        <div class="form-check">
+                            <input class="form-check-input edit-device-checkbox" type="checkbox" name="device_id" value="{{ device.device_id }}" id="edit_device_{{ loop.index }}" ${device_id === '{{ device.device_id }}' ? 'checked' : ''} ${!canEdit ? 'disabled' : ''} onchange="onEditSpecificDeviceSelect()">
+                            <label class="form-check-label" for="edit_device_{{ loop.index }}">
+                                {{ device.device_id[:8] }}... ({{ device.machine_code[:8] }})
+                            </label>
+                        </div>
                         {% endfor %}
-                    </select>
+                    </div>
                 </div>
                 
                 <div class="tab-content" id="detailTabContent">

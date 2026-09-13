@@ -107,6 +107,61 @@
             </div>
         </div>
     </div>
+
+    <!-- 人脸搜索 (1:N) -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="card-title mb-0"><i class="fas fa-search me-2"></i>人脸搜索 (1:N)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3 text-center">
+                            <h6>上传待搜索照片</h6>
+                            <div class="border rounded p-3 mb-2 bg-light d-flex justify-content-center align-items-center" style="height: 280px; overflow: hidden; cursor: pointer;" onclick="document.getElementById('searchImage').click()">
+                                <img id="searchPreview" src="" alt="预览" style="max-height: 100%; max-width: 100%; display: none;">
+                                <div id="searchPlaceholder" class="text-muted">
+                                    <i class="fas fa-cloud-upload-alt fa-3x mb-2"></i>
+                                    <p>点击选择或拖拽图片到此处</p>
+                                </div>
+                            </div>
+                            <input class="form-control" type="file" id="searchImage" name="image" accept="image/*" style="display: none;" onchange="previewImage(this, 'searchPreview', 'searchPlaceholder')">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('searchImage').click()">重新选择</button>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="mb-3">
+                                <button type="button" id="searchBtn" class="btn btn-success btn-lg" onclick="searchFace()">
+                                    <i class="fas fa-search"></i> 开始搜索
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-lg ms-2" onclick="resetSearch()">
+                                    <i class="fas fa-undo"></i> 重置
+                                </button>
+                            </div>
+                            <div id="searchLoading" style="display: none;">
+                                <div class="spinner-border text-success" role="status"></div>
+                                <p class="mt-2 text-muted">正在搜索人脸库，请稍候...</p>
+                            </div>
+                            <div id="searchResult" style="display: none;">
+                                <div class="d-flex align-items-start">
+                                    <img id="searchResultImg" src="" alt="匹配人脸" width="120" height="120" class="rounded me-3" style="object-fit: cover;">
+                                    <div>
+                                        <h5 id="searchResultName" class="mb-1"></h5>
+                                        <div class="text-muted small mb-2" id="searchResultDevice"></div>
+                                        <h3 class="text-success mb-2" id="searchResultSimilarity"></h3>
+                                        <div id="searchResultInfo" class="small"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="searchError" class="alert alert-danger mt-3" style="display: none;">
+                                <i class="fas fa-exclamation-triangle"></i> <span id="searchErrorMessage"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -122,6 +177,74 @@
             }
             reader.readAsDataURL(input.files[0]);
         }
+    }
+
+    function resetSearch() {
+        document.getElementById('searchImage').value = '';
+        document.getElementById('searchPreview').src = '';
+        document.getElementById('searchPreview').style.display = 'none';
+        document.getElementById('searchPlaceholder').style.display = 'block';
+        document.getElementById('searchResult').style.display = 'none';
+        document.getElementById('searchError').style.display = 'none';
+    }
+
+    function searchFace() {
+        var file = document.getElementById('searchImage').files[0];
+        if (!file) {
+            alert('请先上传一张人脸照片！');
+            return;
+        }
+
+        var formData = new FormData();
+        formData.append('image', file);
+
+        document.getElementById('searchLoading').style.display = 'block';
+        document.getElementById('searchResult').style.display = 'none';
+        document.getElementById('searchError').style.display = 'none';
+        document.getElementById('searchBtn').disabled = true;
+
+        fetch('{{ url_for("api_face_search") }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('searchLoading').style.display = 'none';
+            document.getElementById('searchBtn').disabled = false;
+
+            if (data.success) {
+                document.getElementById('searchResultImg').src = data.image_url;
+                document.getElementById('searchResultName').innerText = data.name;
+                document.getElementById('searchResultDevice').innerText = '设备：' + (data.device_id === 'admin' ? '全局 (admin)' : data.device_id);
+                document.getElementById('searchResultSimilarity').innerText = '匹配度 ' + (data.similarity * 100).toFixed(2) + '%';
+
+                var info = [];
+                info.push('名单：' + (data.list_type === 'white' ? '白名单' : '黑名单'));
+                info.push('分组：' + data.groups);
+                if (data.is_admin) info.push('管理员');
+                for (var k in data.metadata) {
+                    if (k === 'is_admin') continue;
+                    var v = data.metadata[k];
+                    if (!v) continue;
+                    var label = k.replace(/^(company|community)_/, '');
+                    info.push(label + '：' + v);
+                }
+                document.getElementById('searchResultInfo').innerHTML = info.map(function(s) {
+                    return '<span class="badge bg-light text-dark me-1 mb-1">' + s + '</span>';
+                }).join('');
+                document.getElementById('searchResult').style.display = 'block';
+            } else {
+                document.getElementById('searchError').style.display = 'block';
+                document.getElementById('searchErrorMessage').innerText = data.message || '搜索失败，请重试';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('searchLoading').style.display = 'none';
+            document.getElementById('searchBtn').disabled = false;
+            document.getElementById('searchError').style.display = 'block';
+            document.getElementById('searchErrorMessage').innerText = '网络或服务器错误，请检查控制台日志';
+        });
     }
 
     function resetForm() {

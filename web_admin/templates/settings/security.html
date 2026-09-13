@@ -17,7 +17,7 @@
                         <label for="new_token" class="form-label fw-bold">新 Token</label>
                         <input type="password" class="form-control" id="new_token" name="new_token" required placeholder="请输入新密码">
                     </div>
-                    
+
                     <div class="mb-4">
                         <label for="confirm_token" class="form-label fw-bold">确认新 Token</label>
                         <input type="password" class="form-control" id="confirm_token" name="confirm_token" required placeholder="请再次输入新密码">
@@ -35,8 +35,28 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-clock me-2"></i> 登录会话超时
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('settings_security') }}">
+                    <input type="hidden" name="action" value="session_timeout">
+                    <div class="mb-3">
+                        <label for="session_timeout" class="form-label fw-bold">无操作超时（分钟）</label>
+                        <input type="number" class="form-control" id="session_timeout" name="session_timeout"
+                               value="{{ session_timeout }}" min="1" required>
+                        <div class="form-text">登录后若在设定时间内无任何操作，将自动退出登录。默认 10 分钟。</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i> 保存
+                    </button>
+                </form>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header bg-light">
                 <i class="fas fa-info-circle me-2"></i> 说明
@@ -44,7 +64,7 @@
             <div class="card-body">
                 <p>管理员 Token 用于访问后台管理系统的密码登录验证。</p>
                 <p>请妥善保管您的 Token。如果您忘记了 Token，可以在服务器的 <code>config.ini</code> 文件中找到或重置它。</p>
-                <p class="text-muted small">注意：修改 Token 后，您可能需要重新登录。</p>
+                <p class="text-muted small mb-0">注意：修改 Token 后，您可能需要重新登录。</p>
             </div>
         </div>
     </div>

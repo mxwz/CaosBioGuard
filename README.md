@@ -1,5 +1,7 @@
 <div align="center" markdown="1">
 
+<img src="logo.png" alt="Caos BioGuard Logo" width="128" />
+
 # 🔮 Caos BioGuard
 **智能分布式人脸门禁与考勤管理系统 | Distributed Face Recognition System**
 
@@ -82,6 +84,146 @@
 
 ---
 
+## 🔖 版本号管理 (Version Management)
+
+整个项目的版本号统一由根目录 **[version.py](version.py)** 维护，避免版本号散落多处。其它模块（如 `managers.py`、`metadata.yaml`）一律引用它，发版时**只需修改 `version.py` 末尾的 `CURRENT_VERSION` 一处**即可。
+
+版本号遵循语义化版本 `v{major}.{minor}.{patch}`，并区分两种版本形态：
+
+| 形态 | 示例 | 说明 |
+| :--- | :--- | :--- |
+| **正式版 (Release)** | `v0.1.3` | 功能完善且无严重漏洞的版本 |
+| **预览版 (Beta)** | `v0.1.3-beta` | 后续可能推出的内测版 |
+
+```python
+# version.py 末尾
+CURRENT_VERSION = VersionInfo(0, 1, 3)                         # 正式版 v0.1.3
+CURRENT_VERSION = VersionInfo(0, 1, 3, ReleaseType.BETA)       # 预览版 v0.1.3-beta
+CURRENT_VERSION = VersionInfo(0, 1, 3, ReleaseType.DEV)        # 开发版 v0.1.3-dev
+```
+
+---
+
+## 🔐 配置文件与隐私字段说明 (Configuration & Privacy)
+
+项目的**密钥、数据库密码、访问令牌**等隐私信息统一存放在以下本地配置文件中。**这些文件严禁上传到公开仓库**（请加入 `.gitignore`）。若仓库未包含这些文件（例如首次部署 / 从源码重建），你需要按下方字段自行创建，否则服务无法正常初始化。
+
+### 1. 根目录 `config.ini`
+
+| 键 | 说明 | 是否隐私 |
+| :--- | :--- | :--- |
+| `[General] mode` | 业务模式（Attendance / Access） | 否 |
+| `[General] startmode` | 启动模式（Sync 等） | 否 |
+| `[General] syncinterval` | 数据同步间隔（秒） | 否 |
+| `[General] networkmode` | 网络模式（Online / Offline） | 否 |
+| `[Cloud] enabled` | 云边分离模式开关（true / false） | 否 |
+| `[Cloud] host / user / database` | 云端数据库连接信息 | 否 |
+| `[Cloud] password` | 云端数据库密码 | **隐私** |
+| `[MySQL] host / user / database / port` | MySQL 连接信息 | 否 |
+| `[MySQL] password` | MySQL 密码 | **隐私** |
+| `[S3] endpoint` | R2/S3 端点（**不含** bucket 路径） | 否 |
+| `[S3] access_key / secret_key` | R2/S3 API 访问令牌 | **隐私** |
+| `[S3] bucket` | 存储桶名称 | 否 |
+| `[S3] region` | 区域（Cloudflare R2 固定填 `auto`） | 否 |
+| `[Security] encryptionkey` | 人脸特征加密密钥（Fernet） | **隐私** |
+| `[WebAdmin] host / port` | 后台监听地址 / 端口 | 否 |
+| `[WebAdmin] protocol` | 访问协议（http / https，默认 http） | 否 |
+| `[WebAdmin] token / salt` | 后台登录令牌（哈希）与盐 | **隐私** |
+| `[WebAdmin] sessiontimeout` | 登录会话空闲超时（分钟，默认 10） | 否 |
+| `[Templates]` / `[Enums]` | 业务模板与枚举字典 | 否 |
+
+### 2. `web_admin/.env`
+
+由 `web_admin/app.py` 通过 `load_dotenv` 读取，用于设置 Flask 运行环境：
+
+| 键 | 说明 | 默认值 | 是否隐私 |
+| :--- | :--- | :--- | :--- |
+| `FLASK_PORT` | 后台监听端口 | `5000` | 否 |
+| `FLASK_ENV` | 运行环境（development / production） | `development` | 否 |
+
+> 💡 上述 `access_key`、`secret_key`、`password`、`token`、`salt`、`encryptionkey` 均为敏感信息，提交代码或打包分发前请务必移除 / 脱敏。
+
+### 3. 快速配置模板（复制即用）
+
+将下面内容保存为根目录 `config.ini`（`<...>` 处替换为你的真实值；留空的密钥项会在首次运行时自动生成）：
+
+```ini
+[General]
+mode = Attendance
+startmode = Sync
+syncinterval = 30
+
+[Cloud]
+enabled = False
+host = localhost
+user = root
+password =
+database = arcface_cloud
+
+[S3]
+endpoint = https://<account_id>.r2.cloudflarestorage.com
+access_key = <your_r2_access_key_id>
+secret_key = <your_r2_secret_access_key>
+bucket = face-images
+region = auto
+
+[MySQL]
+host = 127.0.0.1
+user = root
+password = <your_mysql_password>
+database = face_recognition
+port = 3306
+
+[Security]
+# 留空则首次运行时自动生成 Fernet 加密密钥
+encryptionkey =
+
+[WebAdmin]
+host = 0.0.0.0
+port = 6100
+# 访问协议：http 或 https（域名部署建议 https）
+protocol = http
+# 留空则首次启动时自动生成登录令牌并打印到控制台
+token =
+salt =
+# 登录会话空闲超时（分钟），默认 10
+sessiontimeout = 10
+
+[Templates]
+company = name:text:姓名:false, gender:enum:性别:false, id_card:text:身份证号:false, phone:text:联系电话:false, email:text:电子邮箱:false, employee_id:text:工号:false, department:text:部门:false, position:text:职位:false, hire_date:date:入职日期:false, status:enum:员工状态:false, access_level:enum:门禁权限级别:false, validity_period:datetime:有效期:false, note:text:备注:false
+community = name:text:姓名:false, gender:enum:性别:false, id_card:text:身份证号:false, phone:text:联系电话:false, email:text:电子邮箱:false, building_no:text:楼栋号:false, unit_no:text:单元号:false, room_no:text:房号:false, property_type:enum:房产性质:false, owner_name:text:业主姓名:false, resident_type:enum:人员类型:false, access_areas:multiselect:通行区域:false, validity_period:datetime:有效期:false, note:text:备注:false
+
+[Enums]
+gender = 男,女,其他
+status = 在职,离职,休假,调岗,实习,待入职,停薪留职,退休
+access_level = 1-普通员工,2-管理层,3-受限区域,4-临时员工,5-承包商,6-访客,7-实习生,8-其他
+property_type = 自有,租赁,国有,集体所有,联营企业,股份制企业,港澳台投资,涉外房产,其他
+resident_type = 业主,家属,租客,访客,物业,施工,其他
+access_areas = 大门,单元门,地下室
+```
+
+将下面内容保存为 `web_admin/.env`：
+
+```ini
+FLASK_PORT=6100
+FLASK_ENV=development
+```
+
+### 4. 域名 / HTTPS 部署
+
+云端 Web 后台监听 `0.0.0.0`，可通过 IP 或域名访问。域名部署的完整链路：
+
+1. **域名解析**：将域名 DNS 解析到服务器公网 IP。
+2. **反向代理**：用 Nginx / Caddy 把 `80/443` 转发到 Flask 的 `6100` 端口，并配置 HTTPS 证书。
+3. **边缘端配置**：在 SideUI 设置页中：
+   - 协议：选择 `https`（或按反向代理实际协议选择 `http`）
+   - 服务器地址：填域名（如 `cloud.example.com`）或 IP
+   - 端口：填反向代理对外端口（如 `443` 或自定义）
+
+> 💡 边缘端既支持 IP 也支持域名，本质都是同一个「地址」字符串；关键在于「协议」要与反向代理一致（https 需已配置证书），端口要与对外端口一致。
+
+---
+
 ## 🤝 贡献与支持
 
 加入交流群获取最新动态或技术支持：
@@ -105,6 +247,10 @@
 本项目采用 **[Apache License 2.0](LICENSE)** 协议开源。您可以自由地使用、修改和分发本项目代码，但需遵守协议中的相关规定。
 
 > ⚠️ **注意**：本项目边缘端 UI 依赖了 `PySide6`，该库基于 LGPLv3 协议。在进行商业分发时，请确保您遵守了 LGPLv3 的相关动态链接与开源义务。
+>
+> 🔐 **发布签名 (Release Signing)**：本项目的发布版本（Release）使用 GPG 签名以确保真实性与完整性，签名与验证流程请参见 **[RELEASE_GUIDE.md](RELEASE_GUIDE.md)**。
+>
+> 验证签名前请先导入本项目公钥：`gpg --import pubkey.asc`（公钥文件见 **[pubkey.asc](pubkey.asc)**）。
 
 ### ⚠️ 严格免责与使用条款 (Strict Disclaimer & Terms of Use)
 
