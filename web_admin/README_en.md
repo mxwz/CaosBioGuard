@@ -80,6 +80,62 @@ python web_admin/app.py
 
 ---
 
+## 🧩 Plugin Package Format & Validation (Registry Center)
+
+The registry center manages three kinds of registries (notify channels / face store backends / agent tools) using a **plug-and-play package** model. Every plugin (application) is a Python package containing `__init__.py`. Simply drop it into the corresponding directory to be auto-discovered — there is no "add plugin" button to click in the admin panel.
+
+### Custom Plugin Directories
+
+| Registry | Custom plugin directory |
+| --- | --- |
+| Notify channels | `custom_plugins/notify/` |
+| Face store backends | `custom_plugins/face_store/` |
+| Agent tools | `custom_plugins/agent_tools/` |
+
+### Required Format
+
+Each plugin package must define a module-level `INFO = PluginInfo(...)` in its `__init__.py`. The registry center reads and validates the application through it. **Required attributes**:
+
+| Attribute | Description |
+| --- | --- |
+| `name` | English identifier (a valid Python identifier, e.g. `health_check`) |
+| `display_name` | Chinese display name (e.g. `服务健康检查`) |
+| `description` | Description of what the application does |
+| `origin` | `'system'` (built-in) / `'custom'` (custom) |
+| `entry` | The implementation body (class / instance / factory) |
+
+The optional `tags` attribute is a list of tags used for tag-based filtering in the registry center.
+
+### Example
+
+```python
+from registry.base import PluginInfo
+
+
+class HealthCheckChannel:
+    name = 'health_check'
+    display_name = '服务健康检查'
+
+
+INFO = PluginInfo(
+    name='health_check',
+    display_name='服务健康检查',
+    description='定时探测服务健康状态并告警',
+    origin='custom',
+    entry=HealthCheckChannel(),
+    tags=['通知', '健康检查'],
+)
+```
+
+### Validation Rules
+
+*   A single `.py` file is not a valid plugin form; it must be a package subpackage containing `__init__.py`, otherwise it is **highlighted in red** as well.
+*   Missing any required attribute, an invalid `name`, an invalid `origin`, or an empty `entry` is treated as a **format error**.
+*   Malformed plugins are not shown in the application list; instead they are **highlighted in red** in the "problem applications" section with the concrete error reason.
+*   Valid plugins appear immediately in their registry, with fuzzy search, tag filtering, and type filtering support.
+
+---
+
 ## 📄 License & Authorization
 
 The server code is open-sourced under the **[Apache License 2.0](LICENSE)** license. You are free to use, modify, and distribute this project, provided you comply with the terms of the license.

@@ -9,75 +9,167 @@
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f8f9fa;
+            background-color: #f5f6fa;
         }
         .sidebar {
             height: 100vh;
-            width: 250px;
+            width: 260px;
             position: fixed;
             top: 0;
             left: 0;
-            background-color: #343a40;
-            color: white;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-            transition: all 0.3s;
+            background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+            color: #cbd5e1;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+            transition: all 0.25s;
             z-index: 1000;
+            overflow: hidden;
         }
         .sidebar-header {
-            padding: 20px 15px;
-            background-color: #212529;
-            text-align: center;
-            border-bottom: 1px solid #495057;
+            padding: 22px 20px 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .brand-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            overflow: hidden;
+            flex-shrink: 0;
+            background: rgba(255,255,255,0.08);
+        }
+        .brand-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+        .brand-name {
+            color: #fff;
+            font-weight: 700;
+            font-size: 1.05rem;
+            letter-spacing: 0.3px;
+        }
+        .brand-sub {
+            color: #64748b;
+            font-size: 0.72rem;
+            margin-top: 2px;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 14px 12px 24px;
+        }
+        .nav-section-label {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #475569;
+            font-weight: 700;
+            padding: 14px 12px 6px;
         }
         .sidebar .nav-link {
-            color: rgba(255,255,255,.8);
-            padding: 12px 20px;
-            transition: all 0.3s;
-            border-left: 4px solid transparent;
+            color: #94a3b8;
+            padding: 10px 14px;
+            margin: 2px 0;
+            border-radius: 8px;
+            border-left: none;
+            font-size: 0.92rem;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s ease;
+            white-space: nowrap;
         }
         .sidebar .nav-link:hover {
-            color: #fff;
-            background-color: rgba(255,255,255,0.1);
+            color: #e2e8f0;
+            background: rgba(255,255,255,0.06);
         }
         .sidebar .nav-link.active {
             color: #fff;
-            background-color: #0d6efd;
-            border-left-color: #fff;
+            background: linear-gradient(135deg, #2563eb, #4f46e5);
+            box-shadow: 0 4px 12px rgba(37,99,235,0.35);
         }
-        /* Submenu styles */
-        .submenu-item {
-            font-size: 0.9em;
-            padding-top: 10px;
-            padding-bottom: 10px;
-            background-color: rgba(0,0,0,0.2);
+
+        /* 折叠菜单箭头：默认向下，展开（aria-expanded=true）旋转为向上 */
+        .sidebar a[data-bs-toggle="collapse"] .fa-chevron-down {
+            margin-left: auto;
+            font-size: 0.72rem;
+            transition: transform 0.25s ease;
         }
-        .submenu-item:hover {
-            background-color: rgba(255,255,255,0.05);
-        }
-        .submenu-item.active {
-            background-color: rgba(13, 110, 253, 0.5); /* Lighter blue for submenu active */
-            border-left-color: transparent; /* No border for submenu */
-        }
-        
-        .rotate-180 {
+        .sidebar a[data-bs-toggle="collapse"][aria-expanded="true"] .fa-chevron-down {
             transform: rotate(180deg);
         }
-        
+
+        /* 子菜单（二级菜单）：用更浅的底色块 + 左侧竖线，与一级菜单形成明显层级 */
+        .sidebar .collapse.submenu {
+            background: rgba(255,255,255,0.06);
+            border-left: 3px solid rgba(59,130,246,0.55);
+            border-radius: 10px;
+            margin: 4px 0 10px;
+            padding: 6px;
+        }
+        .sidebar .nav-link.submenu-item {
+            padding: 9px 14px 9px 40px;
+            font-size: 0.86rem;
+            position: relative;
+            color: #d7dee7;
+            margin: 1px 0;
+            border-radius: 7px;
+        }
+        .sidebar .nav-link.submenu-item::before {
+            content: '';
+            position: absolute;
+            left: 24px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #64748b;
+            transition: background 0.2s;
+        }
+        .sidebar .nav-link.submenu-item.active {
+            background: rgba(37,99,235,0.32);
+            color: #fff;
+        }
+        .sidebar .nav-link.submenu-item.active::before {
+            background: #fff;
+        }
+        .sidebar .nav-link.submenu-item:hover {
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+        }
+
         .content {
-            margin-left: 250px;
+            margin-left: 260px;
             padding: 20px;
-            transition: all 0.3s;
+            transition: all 0.25s;
         }
         .card {
             border: none;
             box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
             margin-bottom: 20px;
         }
-        
+
+        /* 侧边栏滚动条样式（深色主题） */
+        .sidebar-nav::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sidebar-nav::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.18);
+            border-radius: 3px;
+        }
+        .sidebar-nav::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
         /* Mobile responsive */
         @media (max-width: 768px) {
             .sidebar {
-                margin-left: -250px;
+                margin-left: -260px;
             }
             .sidebar.active {
                 margin-left: 0;
@@ -86,18 +178,24 @@
                 margin-left: 0;
             }
             .content.active {
-                margin-left: 250px;
+                margin-left: 260px;
             }
         }
     </style>
 </head>
 <body>
 
-<div class="sidebar d-flex flex-column p-3" id="sidebarMenu">
-    <div class="sidebar-header mb-4">
-        <h4>Caos BioGuard</h4>
+<div class="sidebar d-flex flex-column" id="sidebarMenu">
+    <div class="sidebar-header">
+        <div class="brand-icon">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Caos BioGuard">
+        </div>
+        <div>
+            <div class="brand-name">Caos BioGuard</div>
+            <div class="brand-sub">门禁考勤管理后台</div>
+        </div>
     </div>
-    <div class="nav flex-column mb-auto">
+    <div class="nav flex-column sidebar-nav">
         <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if request.endpoint == 'index' else '' }}">
             <i class="fas fa-tachometer-alt me-2"></i> 仪表盘
         </a>
@@ -119,44 +217,54 @@
         <a href="{{ url_for('run_logs') }}" class="nav-link {{ 'active' if request.endpoint == 'run_logs' else '' }}">
             <i class="fas fa-terminal me-2"></i> 运行日志
         </a>
+        <a href="{{ url_for('ai_assistant') }}" class="nav-link {{ 'active' if request.endpoint == 'ai_assistant' else '' }}">
+            <i class="fas fa-robot me-2"></i> AI 助手
+        </a>
+        <a href="{{ url_for('agent_reports') }}" class="nav-link {{ 'active' if request.endpoint == 'agent_reports' else '' }}">
+            <i class="fas fa-clipboard-check me-2"></i> 巡检日报
+        </a>
         
         {% set settings_active = request.endpoint and request.endpoint.startswith('settings') %}
-        <a href="#settingsSubmenu" class="nav-link d-flex align-items-center justify-content-between {{ 'active' if settings_active else '' }}" data-bs-toggle="collapse" aria-expanded="{{ 'true' if settings_active else 'false' }}">
-                <span><i class="fas fa-cogs me-2"></i> 系统设置</span>
-                <i class="fas fa-chevron-down {{ 'rotate-180' if settings_active else '' }}" style="font-size: 0.8rem; transition: transform 0.3s;"></i>
+        <a href="#settingsSubmenu" class="nav-link {{ 'active' if settings_active else '' }}" data-bs-toggle="collapse" aria-expanded="{{ 'true' if settings_active else 'false' }}">
+            <span><i class="fas fa-cogs me-2"></i> 系统设置</span>
+            <i class="fas fa-chevron-down"></i>
+        </a>
+        <div class="collapse submenu {{ 'show' if settings_active else '' }}" id="settingsSubmenu">
+            <a href="{{ url_for('settings_general') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_general' else '' }}">
+                <i class="fas fa-sliders-h me-2"></i> 常规设置
             </a>
-            <div class="collapse {{ 'show' if settings_active else '' }}" id="settingsSubmenu">
-                <a href="{{ url_for('settings_general') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_general' else '' }}" style="padding-left: 3rem;">
-                    <i class="fas fa-sliders-h me-2"></i> 常规设置
-                </a>
-            <a href="{{ url_for('settings_enums') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_enums' else '' }}" style="padding-left: 3rem;">
+            <a href="{{ url_for('settings_enums') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_enums' else '' }}">
                 <i class="fas fa-list-ul me-2"></i> 枚举管理
             </a>
-            <a href="{{ url_for('settings_database') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_database' else '' }}" style="padding-left: 3rem;">
+            <a href="{{ url_for('settings_database') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_database' else '' }}">
                 <i class="fas fa-database me-2"></i> 数据库配置
             </a>
-            <a href="{{ url_for('settings_security') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_security' else '' }}" style="padding-left: 3rem;">
+            <a href="{{ url_for('settings_storage') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_storage' else '' }}">
+                <i class="fas fa-cloud me-2"></i> 对象存储 R2
+            </a>
+            <a href="{{ url_for('settings_security') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_security' else '' }}">
                 <i class="fas fa-lock me-2"></i> 安全设置
             </a>
-            <a href="{{ url_for('settings_about') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_about' else '' }}" style="padding-left: 3rem;">
+            <a href="{{ url_for('settings_notify') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_notify' else '' }}">
+                <i class="fas fa-bell me-2"></i> 通知设置
+            </a>
+            <a href="{{ url_for('settings_about') }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_about' else '' }}">
                 <i class="fas fa-info-circle me-2"></i> 关于系统
             </a>
         </div>
-    </div>
-    
-    <div class="mt-auto pt-3 border-top">
-        <div class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" id="dropdownUser1" data-bs-toggle="dropdown" aria-expanded="false" style="cursor: pointer;">
-            {% if session.get('user') and session.get('user') != 'admin' %}
-                <img src="{{ url_for('face_image', name=session.get('user'), device_id=session.get('user_avatar_device')) }}" alt="" width="32" height="32" class="rounded-circle me-2" onerror="this.src='https://github.com/mdo.png'">
-            {% else %}
-                <img src="https://github.com/mdo.png" alt="" width="32" height="32" class="rounded-circle me-2">
-            {% endif %}
-            <strong>{{ session.get('user', '管理员') }}</strong>
+
+        {% set registry_active = request.endpoint in ('settings_registry', 'settings_registry_view') %}
+        <a href="#registrySubmenu" class="nav-link {{ 'active' if registry_active else '' }}" data-bs-toggle="collapse" aria-expanded="{{ 'true' if registry_active else 'false' }}">
+            <span><i class="fas fa-cubes me-2"></i> 注册中心</span>
+            <i class="fas fa-chevron-down"></i>
+        </a>
+        <div class="collapse submenu {{ 'show' if registry_active else '' }}" id="registrySubmenu">
+            {% for r in registry_nav %}
+            <a href="{{ url_for('settings_registry_view', registry_name=r.name) }}" class="nav-link submenu-item {{ 'active' if request.endpoint == 'settings_registry_view' and request.view_args.get('registry_name') == r.name else '' }}">
+                <i class="fas fa-layer-group me-2"></i> {{ r.label }}
+            </a>
+            {% endfor %}
         </div>
-        <ul class="dropdown-menu dropdown-menu-dark text-small shadow" aria-labelledby="dropdownUser1">
-            <li><a class="dropdown-item" href="#">个人资料</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('logout') }}">退出登录</a></li>
-        </ul>
     </div>
 </div>
 
@@ -164,8 +272,25 @@
     <nav class="navbar navbar-expand-lg navbar-light bg-white mb-4 shadow-sm rounded">
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1">管理后台</span>
-            <div class="d-flex">
-                <span class="text-muted">欢迎, {{ session.get('user', '管理员') }}</span>
+            <div class="ms-auto">
+                <div class="dropdown">
+                    <a class="d-flex align-items-center text-decoration-none text-dark dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="cursor: pointer;">
+                        {% if session.get('user') and session.get('user') != 'admin' %}
+                            <img src="{{ url_for('face_image', name=session.get('user'), device_id=session.get('user_avatar_device')) }}" alt="" width="36" height="36" class="rounded-circle me-2" onerror="this.src='https://github.com/mdo.png'">
+                        {% else %}
+                            <img src="https://github.com/mdo.png" alt="" width="36" height="36" class="rounded-circle me-2">
+                        {% endif %}
+                        <div class="text-start lh-sm">
+                            <div class="fw-bold">{{ session.get('user', '管理员') }}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">管理员</div>
+                        </div>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="userDropdown">
+                        <li><a class="dropdown-item" href="{{ url_for('settings_security') }}"><i class="fas fa-key me-2 text-muted"></i>修改密码</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>退出登录</a></li>
+                    </ul>
+                </div>
             </div>
         </div>
     </nav>
@@ -203,11 +328,9 @@
                     if (settingsSubmenu && !settingsSubmenu.classList.contains('show')) {
                         // Direct class manipulation to avoid animation
                         settingsSubmenu.classList.add('show');
-                        
+
                         if (settingsToggle) {
                             settingsToggle.setAttribute('aria-expanded', 'true');
-                            const icon = settingsToggle.querySelector('.fa-chevron-down');
-                            if(icon) icon.classList.add('rotate-180');
                         }
                     }
                 }

@@ -1,0 +1,25 @@
+# ===== 隐私配置（含密钥/令牌，禁止上传）=====
+config.ini
+web_admin/.env
+
+# ===== 本地数据库与生成数据 =====
+dd/
+sideUI/dd/
+face_images/
+picture/
+*.pkl
+*.db
+*.sqlite3
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+
+# ===== IDE / 编辑器 =====
+.idea/
+.vscode/

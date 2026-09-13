@@ -1,0 +1,104 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>对象存储配置（Cloudflare R2）</h3>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <i class="fas fa-magic me-2"></i> 第一次使用？跟着这 4 步走
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="fw-bold mb-1"><span class="badge bg-primary me-1">1</span>开通 R2</div>
+                        <small class="text-muted">登录 Cloudflare，进入 R2 控制台开通服务（有免费额度，需绑定支付方式但不扣费）。</small>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="fw-bold mb-1"><span class="badge bg-primary me-1">2</span>创建 Bucket</div>
+                        <small class="text-muted">在 R2 控制台点「Create bucket」，起个名字（例如 face-images）。</small>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="fw-bold mb-1"><span class="badge bg-primary me-1">3</span>获取密钥</div>
+                        <small class="text-muted">Overview → Account Details → API Tokens → Manage → Create API Token，权限选 <b>Object Read &amp; Write</b>，复制 Access Key ID 与 Secret Access Key（<b>只显示一次</b>）。</small>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="fw-bold mb-1"><span class="badge bg-primary me-1">4</span>找 Account ID</div>
+                        <small class="text-muted">在 R2 页面右侧 Account Details 找到 Account ID，拼成下方的 Endpoint。</small>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex flex-wrap gap-2">
+                    <a href="https://dash.cloudflare.com/?to=/:account/r2/overview" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-external-link-alt me-1"></i> 打开 R2 控制台（创建 Bucket / 获取密钥）
+                    </a>
+                    <a href="https://developers.cloudflare.com/r2/api/tokens/" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-book me-1"></i> 官方教程：如何获取密钥
+                    </a>
+                    <a href="https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-search me-1"></i> 官方教程：如何找 Account ID
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-cloud me-2"></i> R2 连接信息
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('settings_storage') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Endpoint URL</label>
+                        <input type="text" class="form-control" name="s3_endpoint" value="{{ s3_config.endpoint }}" placeholder="https://你的AccountID.r2.cloudflarestorage.com" required>
+                        <div class="form-text">把「你的AccountID」替换成第 4 步找到的 Account ID。</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Access Key ID</label>
+                        <input type="text" class="form-control" name="s3_access_key" value="{{ s3_config.access_key }}" placeholder="第 3 步复制到的 Access Key ID" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Secret Access Key</label>
+                        <input type="password" class="form-control" name="s3_secret_key" value="{{ s3_config.secret_key }}" placeholder="第 3 步复制到的 Secret Access Key" required>
+                        <div class="form-text">密钥只会显示一次，请妥善保管。</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Bucket 名称</label>
+                        <input type="text" class="form-control" name="s3_bucket" value="{{ s3_config.bucket }}" placeholder="face-images" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Region</label>
+                        <input type="text" class="form-control" name="s3_region" value="{{ s3_config.region }}" placeholder="auto">
+                        <div class="form-text">Cloudflare R2 固定填 auto，无需修改。</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i> 保存配置
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-warning">
+            <div class="card-header bg-warning text-dark">
+                <i class="fas fa-lightbulb me-2"></i> 提示
+            </div>
+            <div class="card-body">
+                <ul class="small mb-0">
+                    <li class="mb-2">保存后需<b>重启云端服务</b>才生效。</li>
+                    <li class="mb-2">Secret Access Key 只显示一次，丢失需重新创建 Token。</li>
+                    <li class="mb-2">权限建议选 <b>Object Read &amp; Write</b>，并可只授权给该 Bucket。</li>
+                    <li>免费额度：10GB 存储 + 每月 1000 万次读请求，出站流量免费。</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

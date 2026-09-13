@@ -1,0 +1,42 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3><i class="fas fa-clipboard-check me-2"></i> 巡检日报</h3>
+</div>
+
+{% if reports %}
+    {% for r in reports %}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <strong>{{ r.title }}</strong>
+                <span class="text-muted ms-3"><i class="far fa-calendar-alt me-1"></i>{{ r.report_date }}</span>
+                {% if r.status == 'normal' %}
+                    <span class="badge bg-success ms-2">正常</span>
+                {% elif r.status == 'warning' %}
+                    <span class="badge bg-warning text-dark ms-2">告警</span>
+                {% elif r.status == 'critical' %}
+                    <span class="badge bg-danger ms-2">严重</span>
+                {% else %}
+                    <span class="badge bg-secondary ms-2">{{ r.status }}</span>
+                {% endif %}
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#report{{ r.id }}">
+                <i class="fas fa-chevron-down me-1"></i>查看
+            </button>
+        </div>
+        <div id="report{{ r.id }}" class="collapse">
+            <div class="card-body">
+                <pre style="white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: 0.9rem;">{{ r.content }}</pre>
+                <small class="text-muted">生成时间：{{ r.created_at }}</small>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>暂无巡检日报。日报由 Dify 定时工作流自动推送生成。
+    </div>
+{% endif %}
+{% endblock %}

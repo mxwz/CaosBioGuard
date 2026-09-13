@@ -1,0 +1,116 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3><i class="fas fa-bell me-2"></i> 通知设置</h3>
+</div>
+
+<div class="row">
+    <!-- 渠道配置 -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-plug me-2"></i> 通知渠道配置
+                <span class="text-muted ms-2 small">凭据保存在 config.ini，新增渠道无需改代码</span>
+            </div>
+            <div class="card-body">
+                {% if channels %}
+                <form method="post" action="{{ url_for('settings_notify') }}">
+                    <input type="hidden" name="action" value="save_channel">
+                    {% for ch in channels %}
+                    <div class="mb-4 border rounded p-3">
+                        <h6 class="mb-3 text-primary">
+                            <i class="fas fa-{{ 'envelope' if ch.name == 'email' else 'link' }} me-2"></i>
+                            {{ ch.display_name }} <span class="text-muted small">({{ ch.name }})</span>
+                        </h6>
+                        {% for f in ch.config_fields %}
+                        <div class="mb-3">
+                            {% if f.type == 'checkbox' %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       id="{{ ch.name }}_{{ f.name }}"
+                                       name="{{ ch.name }}_{{ f.name }}"
+                                       {{ 'checked' if ch.config.get(f.name, '') in ('true', '1', 'on', 'yes') }}>
+                                <label class="form-check-label" for="{{ ch.name }}_{{ f.name }}">{{ f.label }}</label>
+                            </div>
+                            {% else %}
+                            <label class="form-label">{{ f.label }}{% if f.required %}<span class="text-danger">*</span>{% endif %}</label>
+                            <input type="{{ f.type }}" class="form-control"
+                                   name="{{ ch.name }}_{{ f.name }}"
+                                   value="{{ ch.config.get(f.name, '') }}"
+                                   {{ 'required' if f.required }} placeholder="{{ f.label }}">
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i> 保存渠道配置
+                    </button>
+                </form>
+                {% else %}
+                <div class="alert alert-warning">暂无已注册的通知渠道。</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 订阅规则 -->
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-sitemap me-2"></i> 订阅规则（事件 → 渠道）
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('settings_notify') }}" class="mb-4 border rounded p-3 bg-light">
+                    <input type="hidden" name="action" value="save_rule">
+                    <div class="mb-3">
+                        <label class="form-label">事件类型<span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="event_type" list="eventTypes" required placeholder="如 agent_report">
+                        <datalist id="eventTypes">
+                            {% for t in event_types %}<option value="{{ t }}">{% endfor %}
+                        </datalist>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">通知渠道</label>
+                        {% for ch in channels %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="channels" value="{{ ch.name }}" id="rule_ch_{{ ch.name }}">
+                            <label class="form-check-label" for="rule_ch_{{ ch.name }}">{{ ch.display_name }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="enabled" id="rule_enabled" checked>
+                        <label class="form-check-label" for="rule_enabled">启用此规则</label>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-plus me-1"></i> 新增/更新规则
+                    </button>
+                </form>
+
+                {% if rules %}
+                    {% for r in rules %}
+                    <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
+                        <div>
+                            <strong>{{ r.event_type }}</strong>
+                            <span class="badge {{ 'bg-success' if r.enabled else 'bg-secondary' }} ms-2">
+                                {{ '启用' if r.enabled else '停用' }}
+                            </span>
+                            <div class="text-muted small mt-1">渠道：{{ r.channels_list|join(', ') or '（无）' }}</div>
+                        </div>
+                        <form method="post" action="{{ url_for('settings_notify') }}" onsubmit="return confirm('确认删除该规则？');">
+                            <input type="hidden" name="action" value="delete_rule">
+                            <input type="hidden" name="rule_id" value="{{ r.id }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-muted small">暂无订阅规则。添加规则后，对应事件才会触发通知。</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

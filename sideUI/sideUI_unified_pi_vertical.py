@@ -1635,19 +1635,26 @@ class SettingsDialog(QDialog):
         layout4.addWidget(label_net)
         
         form_layout = QFormLayout()
+        self.edit_protocol = QComboBox()
+        self.edit_protocol.addItems(["http", "https"])
         self.edit_host = QLineEdit()
+        self.edit_host.setPlaceholderText("如 192.168.1.10 或 cloud.example.com")
         self.edit_port = QLineEdit()
         self.edit_port.setPlaceholderText("5000")
         
         # Load current config
         try:
             web_config = self.config_manager.get_web_admin_config()
+            protocol = web_config.get('protocol', 'http')
+            if protocol in ('http', 'https'):
+                self.edit_protocol.setCurrentText(protocol)
             self.edit_host.setText(web_config['host'])
             self.edit_port.setText(str(web_config['port']))
         except AttributeError:
             pass
             
-        form_layout.addRow("服务器 IP:", self.edit_host)
+        form_layout.addRow("协议:", self.edit_protocol)
+        form_layout.addRow("服务器地址:", self.edit_host)
         form_layout.addRow("端口:", self.edit_port)
         layout4.addLayout(form_layout)
         
@@ -1754,9 +1761,10 @@ class SettingsDialog(QDialog):
         # Save Web Admin config
         host = self.edit_host.text()
         port = self.edit_port.text()
+        protocol = self.edit_protocol.currentText().strip() or 'http'
         if host and port:
              try:
-                self.config_manager.set_web_admin_config(host, port)
+                self.config_manager.set_web_admin_config(host, port, protocol=protocol)
              except Exception:
                 pass
 
@@ -1770,8 +1778,9 @@ class SettingsDialog(QDialog):
     def sync_configuration(self):
         host = self.edit_host.text()
         port = self.edit_port.text()
+        protocol = self.edit_protocol.currentText().strip() or 'http'
         if not host or not port:
-            QMessageBox.warning(self, "警告", "请输入IP和端口")
+            QMessageBox.warning(self, "警告", "请输入服务器地址和端口")
             return
             
         try:
@@ -1784,7 +1793,7 @@ class SettingsDialog(QDialog):
             client_start_mode = self.config_manager.get_start_mode()
             client_updated_at = self.config_manager.get_config_updated_at()
             
-            url = f"http://{host}:{port}/api/sync_config"
+            url = f"{protocol}://{host}:{port}/api/sync_config"
             params = {
                 'device_id': device_id,
                 'client_mode': client_mode,
@@ -1803,7 +1812,7 @@ class SettingsDialog(QDialog):
                         mysql['host'], mysql['user'], mysql['password'], mysql['database'], mysql['port']
                     )
                     # Also save web admin config
-                    self.config_manager.set_web_admin_config(host, port)
+                    self.config_manager.set_web_admin_config(host, port, protocol=protocol)
                     
                     QMessageBox.information(self, "成功", "配置已同步！请重启程序生效。")
                     self.accept() # Close dialog
@@ -1817,8 +1826,9 @@ class SettingsDialog(QDialog):
     def sync_faces(self):
         host = self.edit_host.text()
         port = self.edit_port.text()
+        protocol = self.edit_protocol.currentText().strip() or 'http'
         if not host or not port:
-            QMessageBox.warning(self, "警告", "请输入IP和端口")
+            QMessageBox.warning(self, "警告", "请输入服务器地址和端口")
             return
             
         try:
@@ -1832,7 +1842,7 @@ class SettingsDialog(QDialog):
             db_manager = parent_window.database_manager
             QApplication.processEvents()
             
-            success, msg = db_manager.sync_faces_from_remote(host, port)
+            success, msg = db_manager.sync_faces_from_remote(host, port, protocol)
             
             self.setCursor(Qt.ArrowCursor)
             
