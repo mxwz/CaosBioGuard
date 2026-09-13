@@ -1,0 +1,233 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1"><i class="fas fa-layer-group me-2"></i>{{ registry['label'] }}</h3>
+        <span class="text-muted small">注册器 <code>{{ registry['name'] }}</code> · 共 {{ registry['items'] | length }} 个应用</span>
+    </div>
+    <a href="{{ url_for('settings_registry') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-cubes me-1"></i> 注册中心
+    </a>
+</div>
+
+{% if registry['problems'] %}
+<div class="card border-danger mb-4">
+    <div class="card-header bg-danger text-white">
+        <i class="fas fa-exclamation-triangle me-2"></i> 发现 {{ registry['problems'] | length }} 个异常应用（格式校验未通过，未展示在列表中）
+    </div>
+    <div class="card-body">
+        {% for p in registry['problems'] %}
+        <div class="alert alert-danger py-2 mb-2 d-flex align-items-start">
+            <i class="fas fa-times-circle me-2 mt-1"></i>
+            <div>
+                <strong>{{ p['name'] }}</strong>
+                {% if p['path'] %}<span class="text-muted small ms-2">{{ p['path'] }}</span>{% endif %}
+                <div class="small">{{ p['error'] }}</div>
+            </div>
+        </div>
+        {% endfor %}
+        <div class="text-muted small mb-0">
+            请按照 README 中的插件包格式说明修正：必须包含 <code>__init__.py</code> 并在其中定义合法的 <code>INFO = PluginInfo(...)</code>。
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 搜索与筛选工具栏 -->
+<div class="card mb-3">
+    <div class="card-body py-3">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                    <input type="text" id="searchInput" class="form-control" placeholder="模糊搜索应用名称 / 说明...">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select id="typeFilter" class="form-select">
+                    <option value="all">全部类型</option>
+                    <option value="system">内置</option>
+                    <option value="custom">自定义</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <div class="d-flex flex-wrap align-items-center gap-1" id="tagChips"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 应用列表 -->
+<div id="pluginGrid" class="row g-3"></div>
+<div id="emptyState" class="text-center text-muted py-5" style="display:none;">
+    <i class="fas fa-inbox fa-3x mb-3 d-block opacity-50"></i>
+    没有符合条件的应用
+</div>
+
+<!-- 分页 -->
+<nav class="mt-4" aria-label="应用分页">
+    <ul class="pagination justify-content-center" id="pagination"></ul>
+</nav>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const REGISTRY = {{ registry | tojson }};
+    const items = REGISTRY.items || [];
+    const allTags = (REGISTRY.items || []).reduce((acc, it) => {
+        (it.tags || []).forEach(t => { if (t && acc.indexOf(t) === -1) acc.push(t); });
+        return acc;
+    }, []).sort();
+
+    const pageSize = 6;
+    let currentPage = 1;
+    let searchTerm = '';
+    let typeFilter = 'all';
+    const activeTags = new Set();
+
+    const grid = document.getElementById('pluginGrid');
+    const emptyState = document.getElementById('emptyState');
+    const pagination = document.getElementById('pagination');
+    const searchInput = document.getElementById('searchInput');
+    const typeSelect = document.getElementById('typeFilter');
+    const tagChips = document.getElementById('tagChips');
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    function filtered() {
+        const q = searchTerm.trim().toLowerCase();
+        return items.filter(it => {
+            const hay = ((it.display_name || '') + ' ' + (it.name || '') + ' ' + (it.description || '')).toLowerCase();
+            if (q && hay.indexOf(q) === -1) return false;
+            if (typeFilter !== 'all' && it.origin !== typeFilter) return false;
+            if (activeTags.size > 0) {
+                const tags = it.tags || [];
+                if (!tags.some(t => activeTags.has(t))) return false;
+            }
+            return true;
+        });
+    }
+
+    function renderChips() {
+        if (!allTags.length) { tagChips.innerHTML = ''; return; }
+        const allBtn = document.createElement('button');
+        allBtn.type = 'button';
+        allBtn.className = 'btn btn-sm ' + (activeTags.size === 0 ? 'btn-primary' : 'btn-outline-secondary');
+        allBtn.textContent = '全部标签';
+        allBtn.addEventListener('click', () => {
+            activeTags.clear();
+            renderChips();
+            currentPage = 1;
+            render();
+        });
+        tagChips.innerHTML = '';
+        tagChips.appendChild(allBtn);
+        allTags.forEach(t => {
+            const active = activeTags.has(t);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-sm ' + (active ? 'btn-primary' : 'btn-outline-secondary');
+            btn.textContent = t;
+            btn.addEventListener('click', () => {
+                if (active) activeTags.delete(t); else activeTags.add(t);
+                renderChips();
+                currentPage = 1;
+                render();
+            });
+            tagChips.appendChild(btn);
+        });
+    }
+
+    function renderGrid(pageItems) {
+        if (!pageItems.length) {
+            grid.innerHTML = '';
+            emptyState.style.display = 'block';
+            return;
+        }
+        emptyState.style.display = 'none';
+        grid.innerHTML = pageItems.map(it => {
+            const isCustom = it.origin === 'custom';
+            const originBadge = isCustom
+                ? '<span class="badge bg-warning text-dark">自定义</span>'
+                : '<span class="badge bg-info text-dark">内置</span>';
+            const iconChar = (it.display_name || it.name || '?').trim().charAt(0);
+            const tags = (it.tags || []).map(t =>
+                '<span class="badge bg-light text-dark border">' + escapeHtml(t) + '</span>'
+            ).join(' ');
+            return (
+                '<div class="col-md-6 col-xl-4">' +
+                    '<div class="card h-100 shadow-sm border-0">' +
+                        '<div class="card-body d-flex flex-column">' +
+                            '<div class="d-flex align-items-start mb-2">' +
+                                '<div class="rounded-3 text-white d-flex align-items-center justify-content-center me-3 flex-shrink-0" ' +
+                                    'style="width:44px;height:44px;background:' + (isCustom ? '#f59f00' : '#0d6efd') + ';font-size:1.2rem;font-weight:600;">' +
+                                    escapeHtml(iconChar) +
+                                '</div>' +
+                                '<div class="flex-grow-1">' +
+                                    '<div class="d-flex justify-content-between align-items-start">' +
+                                        '<h6 class="mb-0">' + escapeHtml(it.display_name || it.name) + '</h6>' +
+                                        originBadge +
+                                    '</div>' +
+                                    '<span class="text-muted small">' + escapeHtml(it.name) + '</span>' +
+                                '</div>' +
+                            '</div>' +
+                            '<p class="text-muted small mb-2 flex-grow-1">' + escapeHtml(it.description || '') + '</p>' +
+                            (tags ? '<div class="d-flex flex-wrap gap-1">' + tags + '</div>' : '') +
+                        '</div>' +
+                    '</div>' +
+                '</div>'
+            );
+        }).join('');
+    }
+
+    function renderPagination(totalPages) {
+        if (totalPages <= 1) { pagination.innerHTML = ''; return; }
+        let html = '';
+        html += '<li class="page-item ' + (currentPage === 1 ? 'disabled' : '') + '"><a class="page-link" href="#" data-page="' + (currentPage - 1) + '">上一页</a></li>';
+        for (let i = 1; i <= totalPages; i++) {
+            html += '<li class="page-item ' + (i === currentPage ? 'active' : '') + '"><a class="page-link" href="#" data-page="' + i + '">' + i + '</a></li>';
+        }
+        html += '<li class="page-item ' + (currentPage === totalPages ? 'disabled' : '') + '"><a class="page-link" href="#" data-page="' + (currentPage + 1) + '">下一页</a></li>';
+        pagination.innerHTML = html;
+        pagination.querySelectorAll('a[data-page]').forEach(a => {
+            a.addEventListener('click', e => {
+                e.preventDefault();
+                const p = parseInt(a.getAttribute('data-page'), 10);
+                if (!p || p < 1 || p > totalPages) return;
+                currentPage = p;
+                render();
+            });
+        });
+    }
+
+    function render() {
+        const list = filtered();
+        const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+        const start = (currentPage - 1) * pageSize;
+        renderGrid(list.slice(start, start + pageSize));
+        renderPagination(totalPages);
+    }
+
+    searchInput.addEventListener('input', () => {
+        searchTerm = searchInput.value;
+        currentPage = 1;
+        render();
+    });
+    typeSelect.addEventListener('change', () => {
+        typeFilter = typeSelect.value;
+        currentPage = 1;
+        render();
+    });
+
+    renderChips();
+    render();
+})();
+</script>
+{% endblock %}

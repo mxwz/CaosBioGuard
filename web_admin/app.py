@@ -3,6 +3,7 @@ import os
 import logging
 import secrets
 import hashlib
+import time
 from datetime import timedelta
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, session, Response
 from werkzeug.utils import secure_filename
@@ -16,7 +17,11 @@ def _verify_caos_origin():
 
 # Add parent directory to path to import managers
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from managers import SyncDatabaseManager, ConfigManager, DatabaseLogHandler, LocalFaceStore, CloudFaceStore, auto_migrate_local_faces_to_cloud, migrate_cloud_faces_to_local, check_cloud_mode_switch
+from managers import SyncDatabaseManager, ConfigManager, DatabaseLogHandler, LocalFaceStore, CloudFaceStore, FaceStoreRegistry, auto_migrate_local_faces_to_cloud, migrate_cloud_faces_to_local, check_cloud_mode_switch
+from agent_tools.tools import agent_bp, init_agent_tools, build_tool_registry
+from agent_tools.mcp import mcp_bp
+from notify import init_notify_center, get_notify_center, Event
+from registry import init_registry_center, get_registry_center
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Change this in production
@@ -71,6 +76,20 @@ db_manager = SyncDatabaseManager(database_path=DB_PATH, sqlite_path=SQLITE_PATH,
 db_manager.face_images_dir = FACE_IMAGES_DIR
 if not os.path.exists(FACE_IMAGES_DIR):
     os.makedirs(FACE_IMAGES_DIR)
+
+# Agent 工具层：复用云端单例，作为独立 Blueprint 注册
+init_agent_tools(db_manager, config_manager, face_store)
+app.register_blueprint(agent_bp)
+# MCP 适配层：与 OpenAPI 复用同一批工具，供 Claude/Cursor/Dify 等 MCP 客户端消费
+app.register_blueprint(mcp_bp)
+
+# 注册中心：统一登记并管理三类注册器（通知渠道 / 人脸存储后端 / Agent 工具）
+_notify_registry = init_notify_center(config_manager, db_manager)
+init_registry_center()
+_registry_center = get_registry_center()
+_registry_center.register(_notify_registry)
+_registry_center.register(FaceStoreRegistry(config_manager, SQLITE_PATH, FACE_IMAGES_DIR, DB_PATH))
+_registry_center.register(build_tool_registry())
 # LS showed config.ini in arcface root AND sideUI/config.ini?
 # LS showed:
 # arcface/config.ini
@@ -220,11 +239,28 @@ def check_auth():
     # We must explicitly allow the delete method, since the endpoint name might be generated differently
     if request.path.startswith('/api/face/') and request.method == 'DELETE':
         return None
+
+    # Agent 工具层端点：由编排层以 token 调用，绕过 session 认证（P2 再加 token 校验）
+    if request.path.startswith('/api/agent/'):
+        return None
         
     if request.endpoint and request.endpoint not in allowed_endpoints:
         # Check if user is logged in
         if not session.get('logged_in'):
             return redirect(url_for('login'))
+
+        # 空闲超时：默认 10 分钟无操作自动退出（可在安全设置中调整）
+        now = time.time()
+        last = session.get('last_active')
+        if last is None:
+            session['last_active'] = now
+        else:
+            timeout = config_manager.get_session_timeout() * 60
+            if timeout > 0 and now - last > timeout:
+                session.clear()
+                flash('登录已超时，请重新登录', 'error')
+                return redirect(url_for('login'))
+            session['last_active'] = now
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -242,6 +278,7 @@ def login():
                 session.permanent = True
                 session['logged_in'] = True
                 session['user'] = 'admin'
+                session['last_active'] = time.time()
                 flash('登录成功', 'success')
                 
                 # Log login
@@ -304,6 +341,7 @@ def login():
                                         session['logged_in'] = True
                                         session['user'] = match_name
                                         session['user_avatar_device'] = 'admin' # Store this to force fetching admin avatar
+                                        session['last_active'] = time.time()
                                         flash(f'欢迎回来, {match_name}', 'success')
                                         
                                         # Log login
@@ -383,6 +421,56 @@ def index():
                            mysql_host=mysql_config['host'],
                            online_devices=online_devices,
                            total_devices=total_devices)
+
+
+@app.route('/ai_assistant')
+def ai_assistant():
+    """AI 助手（嵌入 Dify Agent）"""
+    return render_template('ai_assistant.html')
+
+
+@app.route('/agent_reports')
+def agent_reports():
+    """巡检日报列表"""
+    reports = db_manager.get_agent_reports(limit=100)
+    return render_template('agent_reports.html', reports=reports)
+
+
+@app.route('/api/agent/report', methods=['POST'])
+def api_agent_report():
+    """接收 Dify 定时工作流推送的巡检日报（token 鉴权）"""
+    from datetime import datetime
+    web = config_manager.get_web_admin_config()
+    token = web.get('token', '')
+    auth = request.headers.get('Authorization', '')
+    provided = auth.replace('Bearer ', '').strip() if auth else request.headers.get('X-Auth-Token', '')
+    if not token or provided != token:
+        return jsonify({'status': 'error', 'error': 'unauthorized'}), 401
+
+    data = request.get_json(silent=True) or {}
+    report_date = data.get('report_date') or datetime.now().strftime('%Y-%m-%d')
+    title = data.get('title') or f'巡检日报 {report_date}'
+    content = data.get('content') or ''
+    status = data.get('status') or 'normal'
+
+    if not content:
+        return jsonify({'status': 'error', 'error': 'missing content'}), 400
+
+    if db_manager.save_agent_report(report_date, title, content, status):
+        db_manager.add_admin_log('agent', 'report_push', 'agent_reports', f'{report_date}: {title}', 'normal')
+        # 异常日报触发通知（后台线程分发，不阻塞响应）
+        if status in ('warning', 'critical'):
+            center = get_notify_center()
+            if center:
+                center.dispatch_async(Event(
+                    type='agent_report',
+                    level=status,
+                    title=title,
+                    content=content,
+                    meta={'report_date': report_date},
+                ))
+        return jsonify({'status': 'ok'})
+    return jsonify({'status': 'error', 'error': 'save failed'}), 500
 
 @app.route('/statistics')
 def statistics():
@@ -631,7 +719,10 @@ def add_face():
     groups = request.form.getlist('groups') # Multi-select
     groups_str = ",".join(groups) if groups else "all"
     list_type = request.form.get('list_type', 'white')
-    device_id = request.form.get('device_id', 'admin')
+    # 多设备：为每个所选设备分别登记一条记录；勾选“全局(admin)”则只登记一份全局人脸
+    device_ids = [d.strip() for d in request.form.getlist('device_id') if d and d.strip()]
+    if not device_ids or 'admin' in device_ids:
+        device_ids = ['admin']
     
     # Check image file
     if 'image' not in request.files:
@@ -705,10 +796,12 @@ def add_face():
                 flash('检测到多张人脸，请确保图片只有一个人', 'error')
                 return redirect(url_for('faces'))
             
-            # Add face to DB
-            db_manager.add_face(name, faces[0].embedding, face_image=img, groups=groups_str, list_type=list_type, metadata=metadata, device_id=device_id)
-            db_manager.add_admin_log(user, 'add_face', name, f'Groups: {groups_str}, List: {list_type}, Device: {device_id}', 'high')
-            flash(f'成功添加用户: {name}', 'success')
+            # Add face to DB（支持多设备：每个设备一条记录，图片/特征独立存储）
+            for did in device_ids:
+                db_manager.add_face(name, faces[0].embedding, face_image=img, groups=groups_str, list_type=list_type, metadata=metadata, device_id=did)
+            device_desc = '全局' if device_ids == ['admin'] else ",".join(device_ids)
+            db_manager.add_admin_log(user, 'add_face', name, f'Groups: {groups_str}, List: {list_type}, Device: {device_desc}', 'high')
+            flash(f'成功添加用户: {name}（设备: {device_desc}）', 'success')
             
         except Exception as e:
             db_manager.add_admin_log(user, 'add_face_failed', name, str(e), 'medium')
@@ -721,21 +814,28 @@ def edit_face():
     """Edit face metadata"""
     user = session.get('user', 'admin')
     name = request.form.get('name')
-    device_id = request.form.get('device_id', 'admin')
+    old_device_id = request.form.get('old_device_id', 'admin')
     if not name:
-        flash('Missing user name', 'error')
+        flash('姓名不能为空', 'error')
         return redirect(url_for('faces'))
-        
+
+    # 新设备集合（多选）；为空则保持原设备归属
+    new_device_ids = [d.strip() for d in request.form.getlist('device_id') if d and d.strip()]
+    if not new_device_ids:
+        new_device_ids = [old_device_id]
+    if 'admin' in new_device_ids:
+        new_device_ids = ['admin']
+
     # Permission Check: Sub-admin cannot edit Web admins (device_id == 'admin')
-    if user != 'admin' and device_id == 'admin':
+    if user != 'admin' and (old_device_id == 'admin' or 'admin' in new_device_ids):
         flash('您没有权限编辑Web管理员的信息', 'error')
         return redirect(url_for('faces'))
         
     user_faces = db_manager.database.get(name, [])
-    user_data = next((f for f in user_faces if f.get('device_id', 'admin') == device_id), None)
+    user_data = next((f for f in user_faces if f.get('device_id', 'admin') == old_device_id), None)
     
     if not user_data:
-        flash(f'User {name} on device {device_id} not found', 'error')
+        flash(f'用户 {name} 在设备 {old_device_id} 未找到', 'error')
         return redirect(url_for('faces'))
     
     # Existing data
@@ -777,12 +877,19 @@ def edit_face():
                 new_metadata[prefixed_key] = value
                 
     try:
-        db_manager.add_face(name, embedding, groups=groups, list_type=list_type, metadata=new_metadata, device_id=device_id)
-        db_manager.add_admin_log(user, 'edit_face', name, f'Updated metadata', 'normal')
-        flash(f'Updated details for {name}', 'success')
+        # 迁移原图，避免改设备后新记录缺头像
+        face_image = db_manager.load_face_image(name, old_device_id)
+        for did in new_device_ids:
+            db_manager.add_face(name, embedding, face_image=face_image, groups=groups, list_type=list_type, metadata=new_metadata, device_id=did)
+        # 原设备不再属于新集合时删除旧记录
+        if old_device_id not in new_device_ids:
+            db_manager.delete_face(name, old_device_id)
+        device_desc = '全局' if new_device_ids == ['admin'] else ",".join(new_device_ids)
+        db_manager.add_admin_log(user, 'edit_face', name, f'Devices: {device_desc}', 'normal')
+        flash(f'更新成功: {name}（设备: {device_desc}）', 'success')
     except Exception as e:
         db_manager.add_admin_log(user, 'edit_face_failed', name, str(e), 'medium')
-        flash(f'Failed to update: {e}', 'error')
+        flash(f'更新失败: {e}', 'error')
         
     return redirect(url_for('faces'))
 
@@ -940,6 +1047,83 @@ def api_face_compare():
 
     except Exception as e:
         logger.error(f"Face compare API error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/face_search', methods=['POST'])
+def api_face_search():
+    """人脸搜索 (1:N)：在已知人脸库（所有人脸，不去重）中匹配最相似人脸"""
+    try:
+        if 'image' not in request.files:
+            return jsonify({'success': False, 'message': '请上传一张人脸照片'}), 400
+
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({'success': False, 'message': '请选择图片'}), 400
+
+        if not hasattr(app, 'face_app') or app.face_app is None:
+            load_face_model()
+        if not hasattr(app, 'face_app') or app.face_app is None:
+            return jsonify({'success': False, 'message': '人脸识别模型加载失败'}), 500
+
+        file.seek(0)
+        img_bytes = file.read()
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return jsonify({'success': False, 'message': '无效的图片文件'}), 400
+
+        faces = app.face_app.get(img)
+        if not faces:
+            return jsonify({'success': False, 'message': '未检测到人脸，请更换照片'}), 400
+        if len(faces) > 1:
+            # 多张人脸时默认取面积最大的一张
+            faces.sort(key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]), reverse=True)
+
+        query_emb = np.array(faces[0].embedding).flatten()
+        query_norm = float(np.linalg.norm(query_emb))
+        if query_norm == 0:
+            return jsonify({'success': False, 'message': '人脸特征提取失败'}), 400
+
+        # 遍历所有人脸记录（不去重，同名不同设备分别比较），取相似度最高的一条
+        database = getattr(db_manager, 'database', {}) or {}
+        best_sim = -1.0
+        best_name = None
+        best_face = None
+
+        for name, face_list in database.items():
+            for face in face_list:
+                emb = np.array(face.get('embedding')).flatten()
+                emb_norm = float(np.linalg.norm(emb))
+                if emb_norm == 0:
+                    continue
+                sim = float(np.dot(query_emb, emb) / (query_norm * emb_norm))
+                if sim > best_sim:
+                    best_sim = sim
+                    best_name = name
+                    best_face = face
+
+        if best_face is None:
+            return jsonify({'success': False, 'message': '人脸库为空，暂无可匹配的人脸'}), 404
+
+        device_id = best_face.get('device_id', 'admin')
+        metadata = best_face.get('metadata', {}) or {}
+        image_url = url_for('face_image', name=best_name, device_id=device_id)
+
+        return jsonify({
+            'success': True,
+            'name': best_name,
+            'device_id': device_id,
+            'similarity': round(best_sim, 4),
+            'groups': best_face.get('groups', 'all'),
+            'list_type': best_face.get('list_type', 'white'),
+            'is_admin': bool(metadata.get('is_admin', False)),
+            'metadata': metadata,
+            'image_url': image_url,
+            'total_faces': sum(len(v) for v in database.values())
+        })
+
+    except Exception as e:
+        logger.error(f"Face search API error: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/sync_now', methods=['POST'])
@@ -1148,11 +1332,48 @@ def settings_database():
     mysql_config = config_manager.get_mysql_config()
     return render_template('settings/database.html', mysql_config=mysql_config)
 
-@app.route('/settings/security', methods=['GET', 'POST'])
-def settings_security():
-    """Security Settings Page - Change Token"""
+@app.route('/settings/storage', methods=['GET', 'POST'])
+def settings_storage():
+    """对象存储（Cloudflare R2）配置页"""
     user = session.get('user', 'admin')
     if request.method == 'POST':
+        endpoint = request.form.get('s3_endpoint', '').strip()
+        access_key = request.form.get('s3_access_key', '').strip()
+        secret_key = request.form.get('s3_secret_key', '').strip()
+        bucket = request.form.get('s3_bucket', '').strip()
+        region = request.form.get('s3_region', '').strip() or 'auto'
+
+        if not endpoint or not access_key or not secret_key or not bucket:
+            flash('请完整填写 R2 的 Endpoint、Access Key、Secret Key 与 Bucket', 'error')
+            return redirect(url_for('settings_storage'))
+
+        config_manager.set_s3_config(endpoint, access_key, secret_key, bucket, region)
+        db_manager.add_admin_log(user, 'settings_update', 'storage', f'Updated R2 config: {bucket}', 'high')
+        flash('对象存储配置已保存，重启云端服务后生效', 'success')
+        return redirect(url_for('settings_storage'))
+
+    s3_config = config_manager.get_s3_config()
+    return render_template('settings/storage.html', s3_config=s3_config)
+
+@app.route('/settings/security', methods=['GET', 'POST'])
+def settings_security():
+    """Security Settings Page - Change Token / Session Timeout"""
+    user = session.get('user', 'admin')
+    if request.method == 'POST':
+        action = request.form.get('action', 'change_password')
+
+        if action == 'session_timeout':
+            try:
+                minutes = int(request.form.get('session_timeout', '10'))
+                if minutes < 1:
+                    raise ValueError
+                config_manager.set_session_timeout(minutes)
+                db_manager.add_admin_log(user, 'settings_update', 'security', f'Session timeout: {minutes}min', 'medium')
+                flash('登录会话超时已更新', 'success')
+            except (ValueError, TypeError):
+                flash('超时时间必须为正整数（分钟）', 'error')
+            return redirect(url_for('settings_security'))
+
         new_token = request.form.get('new_token')
         confirm_token = request.form.get('confirm_token')
         
@@ -1190,7 +1411,99 @@ def settings_security():
         flash('管理员密码已修改', 'success')
         return redirect(url_for('settings_security'))
         
-    return render_template('settings/security.html')
+    return render_template('settings/security.html', session_timeout=config_manager.get_session_timeout())
+
+@app.route('/settings/notify', methods=['GET', 'POST'])
+def settings_notify():
+    """通知设置页：渠道配置 + 订阅规则（通知注册中心）"""
+    import json as _json
+    user = session.get('user', 'admin')
+    center = get_notify_center()
+    if not center:
+        flash('通知中心未初始化', 'error')
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'save_channel':
+            for ch in center.list_channels():
+                values = {}
+                for f in ch['config_fields']:
+                    field_key = f"{ch['name']}_{f['name']}"
+                    if f.get('type') == 'checkbox':
+                        values[f['name']] = 'true' if request.form.get(field_key) else 'false'
+                    else:
+                        values[f['name']] = (request.form.get(field_key) or '').strip()
+                config_manager.set_section(ch['config_section'], values)
+            db_manager.add_admin_log(user, 'settings_update', 'notify', 'Updated notify channels', 'high')
+            flash('通知渠道配置已保存', 'success')
+        elif action == 'save_rule':
+            event_type = request.form.get('event_type', '').strip()
+            channels = request.form.getlist('channels')
+            enabled = request.form.get('enabled') == 'on'
+            if not event_type:
+                flash('请输入事件类型', 'error')
+            elif db_manager.save_notify_rule(event_type, channels, enabled):
+                db_manager.add_admin_log(user, 'settings_update', 'notify_rule', f'{event_type}: {channels}', 'normal')
+                flash('订阅规则已保存', 'success')
+            else:
+                flash('订阅规则保存失败', 'error')
+        elif action == 'delete_rule':
+            rule_id = request.form.get('rule_id', type=int)
+            if rule_id and db_manager.delete_notify_rule(rule_id):
+                db_manager.add_admin_log(user, 'settings_update', 'notify_rule', f'deleted id={rule_id}', 'normal')
+                flash('订阅规则已删除', 'success')
+            else:
+                flash('删除失败', 'error')
+        return redirect(url_for('settings_notify'))
+
+    channels = center.list_channels()
+    rules = db_manager.get_notify_rules()
+    for r in rules:
+        try:
+            r['channels_list'] = _json.loads(r.get('channels') or '[]')
+        except Exception:
+            r['channels_list'] = []
+    event_types = ['agent_report']
+    return render_template('settings/notify.html', channels=channels, rules=rules, event_types=event_types)
+
+@app.route('/settings/registry')
+def settings_registry():
+    """注册中心入口：跳转到第一个注册器。"""
+    center = get_registry_center()
+    if not center:
+        flash('注册中心未初始化', 'error')
+        return redirect(url_for('index'))
+    registries = center.list()
+    if not registries:
+        return render_template('settings/registry.html', registry=None, registries=[], all_tags=[])
+    return redirect(url_for('settings_registry_view', registry_name=registries[0]['name']))
+
+
+@app.route('/settings/registry/<registry_name>')
+def settings_registry_view(registry_name):
+    """注册中心：查看单个注册器及其插件（含无效插件爆红提示）。"""
+    center = get_registry_center()
+    if not center:
+        flash('注册中心未初始化', 'error')
+        return redirect(url_for('index'))
+    registries = center.list()
+    registry = next((r for r in registries if r['name'] == registry_name), None)
+    if registry is None:
+        flash('注册器不存在', 'error')
+        return redirect(url_for('settings_registry'))
+    all_tags = sorted({t for it in registry['items'] for t in it.get('tags', [])})
+    return render_template('settings/registry.html', registry=registry, registries=registries, all_tags=all_tags)
+
+
+@app.route('/api/registry')
+def api_registry_list():
+    """返回注册中心全量元信息。"""
+    center = get_registry_center()
+    if not center:
+        return jsonify({'status': 'error', 'error': '注册中心未初始化'}), 500
+    return jsonify({'status': 'ok', 'registries': center.list()})
+
 
 @app.route('/settings/about')
 def settings_about():
@@ -1553,6 +1866,13 @@ def api_face_sync_one():
     except Exception as e:
         logger.error(f"Sync One Error: {e}")
         return jsonify({'message': str(e)}), 500
+
+@app.context_processor
+def inject_registry_nav():
+    """为侧边栏提供注册中心各注册器导航。"""
+    center = get_registry_center()
+    return {'registry_nav': center.names() if center else []}
+
 
 if __name__ == '__main__':
     load_dotenv(find_dotenv())

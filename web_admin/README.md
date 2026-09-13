@@ -80,6 +80,62 @@ python web_admin/app.py
 
 ---
 
+## 🧩 插件包格式与校验（注册中心）
+
+注册中心采用**拔插式插件包**管理三类注册器（通知渠道 / 人脸存储后端 / Agent 工具）。所有插件（应用）均为一个包含 `__init__.py` 的 Python 软件包，自行放入对应目录即可被自动发现，无需在后台点击任何「添加插件」按钮。
+
+### 自定义插件目录
+
+| 注册器 | 自定义插件目录 |
+| --- | --- |
+| 通知渠道 | `custom_plugins/notify/` |
+| 人脸存储后端 | `custom_plugins/face_store/` |
+| Agent 工具 | `custom_plugins/agent_tools/` |
+
+### 必须的格式
+
+每个插件包需在其 `__init__.py` 中定义一个模块级 `INFO = PluginInfo(...)`，注册中心据此读取并校验该应用。**必填属性**如下：
+
+| 属性 | 说明 |
+| --- | --- |
+| `name` | 英文标识符（合法 Python 标识符，如 `health_check`） |
+| `display_name` | 中文名（如 `服务健康检查`） |
+| `description` | 应用内容说明 |
+| `origin` | `'system'`（内置）/ `'custom'`（自定义） |
+| `entry` | 实现本体（类 / 实例 / 工厂） |
+
+可选属性 `tags` 为标签列表，用于注册中心的标签筛选。
+
+### 示例
+
+```python
+from registry.base import PluginInfo
+
+
+class HealthCheckChannel:
+    name = 'health_check'
+    display_name = '服务健康检查'
+
+
+INFO = PluginInfo(
+    name='health_check',
+    display_name='服务健康检查',
+    description='定时探测服务健康状态并告警',
+    origin='custom',
+    entry=HealthCheckChannel(),
+    tags=['通知', '健康检查'],
+)
+```
+
+### 校验规则
+
+*   单个 `.py` 文件不是合法的插件形式，必须为包含 `__init__.py` 的软件包子包，否则同样**爆红提示**。
+*   缺少任一必填属性、`name` 非法、`origin` 非法或 `entry` 为空，均视为**格式错误**。
+*   格式错误的插件不会展示在应用列表中，而会在注册中心的「异常应用」区域**爆红提示**，并附带具体错误原因。
+*   格式正确的插件会立即出现在对应注册器中，并支持模糊搜索、标签筛选与类型筛选。
+
+---
+
 ## 📄 协议与授权 (Server License)
 
 本服务端代码采用 **[Apache License 2.0](LICENSE)** 协议开源。您可以自由地使用、修改和分发本项目代码，但需遵守协议中的相关规定。

@@ -1,0 +1,21 @@
+# GitHub Issue 模板选择器配置文件
+# 该文件用于自定义用户点击 "New Issue" 时看到的页面选项
+# 官方文档: https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository
+
+# 是否允许用户提交空白（无模板）的 Issue。
+# 设置为 false 强制用户必须选择一个模板或联系链接，这有助于保持 Issue 格式的统一和规范。
+blank_issues_enabled: false
+
+# 配置额外的外部链接，这些链接将作为选项展示在 Issue 模板选择页面上。
+contact_links:
+  - name: 💬 社区讨论与问答 (Discussions)
+    url: https://github.com/mxwz/CaosBioGuard/discussions
+    about: "如果你有问题需要解答、想分享想法或与其他用户交流，请前往讨论区。请不要在 Issue 中提问。"
+
+  - name: 🔒 报告安全漏洞 (Security Vulnerability)
+    url: https://github.com/caos-projects/CaosBioGuard/security/advisories/new # 请确保你配置了 Security advisory，或替换为你接收安全报告的邮箱/链接
+    about: "请不要在公开的 Issue 中报告安全漏洞！如果你发现了安全问题，请通过此私密通道向我们报告。"
+
+  - name: 📚 查看官方文档 (Documentation)
+    url: https://github.com/mxwz/CaosBioGuard/blob/main/README.md
+    about: "在提交问题之前，请先查阅我们的官方文档，里面可能已经有你需要的答案。"

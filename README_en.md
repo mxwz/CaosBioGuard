@@ -1,5 +1,7 @@
 <div align="center" markdown="1">
 
+<img src="logo.png" alt="Caos BioGuard Logo" width="128" />
+
 # 🔮 Caos BioGuard
 **Distributed Face Recognition Access Control & Attendance System**
 
@@ -69,6 +71,126 @@ This project relies on `PyTorch` for model inference:
 
 > 💡 **Edge Database Configuration Note**:
 > When configuring the MySQL connection on the Edge device (SideUI), **DO NOT use** `127.0.0.1` or `localhost` as the server address (this points to the edge device itself). You MUST use the server's actual **LAN IP** or **Public IP** so the edge device can correctly connect to the server's database across the network.
+
+---
+
+## 🔐 Configuration & Privacy Fields
+
+Secrets, database passwords, and access tokens are all stored in the following local configuration files. **These files must never be pushed to a public repository** (add them to `.gitignore`). If they are absent (e.g. first-time deployment or rebuild from source), create them manually using the fields below, otherwise the service cannot initialize properly.
+
+### 1. Root `config.ini`
+
+| Key | Description | Private? |
+| :--- | :--- | :--- |
+| `[General] mode` | Business mode (Attendance / Access) | No |
+| `[General] startmode` | Start mode (Sync etc.) | No |
+| `[General] syncinterval` | Data sync interval (seconds) | No |
+| `[General] networkmode` | Network mode (Online / Offline) | No |
+| `[Cloud] enabled` | Cloud-edge split toggle (true / false) | No |
+| `[Cloud] host / user / database` | Cloud database connection info | No |
+| `[Cloud] password` | Cloud database password | **Yes** |
+| `[MySQL] host / user / database / port` | MySQL connection info | No |
+| `[MySQL] password` | MySQL password | **Yes** |
+| `[S3] endpoint` | R2/S3 endpoint (exclude the bucket path) | No |
+| `[S3] access_key / secret_key` | R2/S3 API access token | **Yes** |
+| `[S3] bucket` | Bucket name | No |
+| `[S3] region` | Region (always `auto` for Cloudflare R2) | No |
+| `[Security] encryptionkey` | Face embedding encryption key (Fernet) | **Yes** |
+| `[WebAdmin] host / port` | Admin listen address / port | No |
+| `[WebAdmin] protocol` | Access protocol (http / https, default http) | No |
+| `[WebAdmin] token / salt` | Admin login token (hash) and salt | **Yes** |
+| `[WebAdmin] sessiontimeout` | Login idle timeout (minutes, default 10) | No |
+| `[Templates]` / `[Enums]` | Business templates and enum dictionaries | No |
+
+### 2. `web_admin/.env`
+
+Loaded by `web_admin/app.py` via `load_dotenv` to configure the Flask runtime:
+
+| Key | Description | Default | Private? |
+| :--- | :--- | :--- | :--- |
+| `FLASK_PORT` | Admin listen port | `5000` | No |
+| `FLASK_ENV` | Runtime env (development / production) | `development` | No |
+
+> 💡 The `access_key`, `secret_key`, `password`, `token`, `salt`, and `encryptionkey` values are sensitive. Always remove / redact them before committing or distributing.
+
+### 3. Quick Config Template (Copy & Use)
+
+Save the following as the root `config.ini` (replace `<...>` with your real values; leave the empty secret fields blank and they will be auto-generated on first run):
+
+```ini
+[General]
+mode = Attendance
+startmode = Sync
+syncinterval = 30
+
+[Cloud]
+enabled = False
+host = localhost
+user = root
+password =
+database = arcface_cloud
+
+[S3]
+endpoint = https://<account_id>.r2.cloudflarestorage.com
+access_key = <your_r2_access_key_id>
+secret_key = <your_r2_secret_access_key>
+bucket = face-images
+region = auto
+
+[MySQL]
+host = 127.0.0.1
+user = root
+password = <your_mysql_password>
+database = face_recognition
+port = 3306
+
+[Security]
+# Leave blank to auto-generate the Fernet encryption key on first run
+encryptionkey =
+
+[WebAdmin]
+host = 0.0.0.0
+port = 6100
+# Access protocol: http or https (use https for domain deployments)
+protocol = http
+# Leave blank to auto-generate the login token and print it to the console on first start
+token =
+salt =
+# Login idle timeout in minutes, default 10
+sessiontimeout = 10
+
+[Templates]
+company = name:text:姓名:false, gender:enum:性别:false, id_card:text:身份证号:false, phone:text:联系电话:false, email:text:电子邮箱:false, employee_id:text:工号:false, department:text:部门:false, position:text:职位:false, hire_date:date:入职日期:false, status:enum:员工状态:false, access_level:enum:门禁权限级别:false, validity_period:datetime:有效期:false, note:text:备注:false
+community = name:text:姓名:false, gender:enum:性别:false, id_card:text:身份证号:false, phone:text:联系电话:false, email:text:电子邮箱:false, building_no:text:楼栋号:false, unit_no:text:单元号:false, room_no:text:房号:false, property_type:enum:房产性质:false, owner_name:text:业主姓名:false, resident_type:enum:人员类型:false, access_areas:multiselect:通行区域:false, validity_period:datetime:有效期:false, note:text:备注:false
+
+[Enums]
+gender = 男,女,其他
+status = 在职,离职,休假,调岗,实习,待入职,停薪留职,退休
+access_level = 1-普通员工,2-管理层,3-受限区域,4-临时员工,5-承包商,6-访客,7-实习生,8-其他
+property_type = 自有,租赁,国有,集体所有,联营企业,股份制企业,港澳台投资,涉外房产,其他
+resident_type = 业主,家属,租客,访客,物业,施工,其他
+access_areas = 大门,单元门,地下室
+```
+
+Save the following as `web_admin/.env`:
+
+```ini
+FLASK_PORT=6100
+FLASK_ENV=development
+```
+
+### 4. Domain / HTTPS Deployment
+
+The cloud admin backend listens on `0.0.0.0`, so it can be reached via either IP or a domain name. The full domain deployment chain:
+
+1. **DNS**: Point your domain to the server's public IP.
+2. **Reverse proxy**: Use Nginx / Caddy to forward `80/443` to Flask's `6100` port and configure an HTTPS certificate.
+3. **Edge config**: In the SideUI settings page:
+   - Protocol: select `https` (or `http` to match your reverse proxy)
+   - Server address: enter the domain (e.g. `cloud.example.com`) or IP
+   - Port: the reverse proxy's public port (e.g. `443` or a custom port)
+
+> 💡 The edge device accepts both IP and domain — both are just the same "address" string. The key is that the **protocol** must match the reverse proxy (https requires a valid certificate) and the **port** must match the public port.
 
 ---
 

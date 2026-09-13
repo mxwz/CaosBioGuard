@@ -18,6 +18,10 @@ import requests
 import base64
 from abc import ABC, abstractmethod
 
+from registry.base import Registry
+
+from version import CURRENT_VERSION
+
 __caos_fingerprint__ = "CAOS-BIOGUARD-CORE-WATERMARK-2026-X79-UNAUTHORIZED-USE-PROHIBITED"
 
 try:
@@ -226,21 +230,52 @@ class ConfigManager:
     def get_web_admin_config(self):
         self.config.read(self.config_path, encoding='utf-8')
         return {
+            'protocol': self.config.get('WebAdmin', 'Protocol', fallback='http'),
             'host': self.config.get('WebAdmin', 'Host', fallback='localhost'),
             'port': self.config.getint('WebAdmin', 'Port', fallback=5000),
             'token': self.config.get('WebAdmin', 'Token', fallback=''),
             'salt': self.config.get('WebAdmin', 'Salt', fallback='')
         }
 
-    def set_web_admin_config(self, host, port=5000, token=None, salt=None):
+    def set_web_admin_config(self, host, port=5000, token=None, salt=None, protocol=None):
         if 'WebAdmin' not in self.config:
             self.config['WebAdmin'] = {}
         self.config['WebAdmin']['Host'] = host
         self.config['WebAdmin']['Port'] = str(port)
+        if protocol is not None:
+            self.config['WebAdmin']['Protocol'] = protocol
         if token:
             self.config['WebAdmin']['Token'] = token
         if salt:
             self.config['WebAdmin']['Salt'] = salt
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            self.config.write(f)
+
+    def get_session_timeout(self):
+        """登录会话空闲超时（分钟），默认 10 分钟。"""
+        self.config.read(self.config_path, encoding='utf-8')
+        return self.config.getint('WebAdmin', 'SessionTimeout', fallback=10)
+
+    def set_session_timeout(self, minutes):
+        if 'WebAdmin' not in self.config:
+            self.config['WebAdmin'] = {}
+        self.config['WebAdmin']['SessionTimeout'] = str(int(minutes))
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            self.config.write(f)
+
+    def get_section(self, section):
+        """通用读取 config.ini 的某个 section（键名小写），供通知渠道等插件使用。"""
+        self.config.read(self.config_path, encoding='utf-8')
+        if not self.config.has_section(section):
+            return {}
+        return dict(self.config[section])
+
+    def set_section(self, section, values):
+        """通用写入 config.ini 的某个 section。values 为 {key: value}。"""
+        if not self.config.has_section(section):
+            self.config.add_section(section)
+        for k, v in (values or {}).items():
+            self.config[section][str(k)] = str(v)
         with open(self.config_path, 'w', encoding='utf-8') as f:
             self.config.write(f)
 
@@ -280,13 +315,14 @@ class ConfigManager:
             self.config.write(f)
 
     def get_cloud_endpoint(self):
-        """云端 Web 端地址（边缘端写代理/对账目标），形如 http://host:port"""
+        """云端 Web 端地址（边缘端写代理/对账目标），形如 {protocol}://host:port"""
         self.config.read(self.config_path, encoding='utf-8')
         host = self.config.get('Cloud', 'host', fallback='') or ''
         if not host or host.strip().lower() in ('localhost', '127.0.0.1'):
             host = self.config.get('WebAdmin', 'Host', fallback='localhost')
+        protocol = self.config.get('WebAdmin', 'Protocol', fallback='http')
         port = self.config.getint('WebAdmin', 'Port', fallback=5000)
-        return f"http://{host}:{port}"
+        return f"{protocol}://{host}:{port}"
 
     def get_s3_config(self):
         self.config.read(self.config_path, encoding='utf-8')
@@ -297,6 +333,17 @@ class ConfigManager:
             'bucket': self.config.get('S3', 'bucket', fallback='face-images'),
             'region': self.config.get('S3', 'region', fallback='auto')
         }
+
+    def set_s3_config(self, endpoint, access_key, secret_key, bucket, region='auto'):
+        if 'S3' not in self.config:
+            self.config['S3'] = {}
+        self.config['S3']['endpoint'] = endpoint
+        self.config['S3']['access_key'] = access_key
+        self.config['S3']['secret_key'] = secret_key
+        self.config['S3']['bucket'] = bucket
+        self.config['S3']['region'] = region
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            self.config.write(f)
 
 
 def encrypt_embedding(config_manager, embedding):
@@ -971,6 +1018,31 @@ def migrate_cloud_faces_to_local(config_manager, cloud_store, sqlite_path, face_
     return True
 
 
+class FaceStoreRegistry(Registry):
+    """人脸存储后端注册器：登记 Local/Cloud 两种内置后端 + 自定义后端，按配置选择当前实现。"""
+
+    name = 'face_store'
+    label = '人脸存储后端'
+    custom_plugin_package = 'custom_plugins.face_store'
+
+    def __init__(self, config_manager, sqlite_path=None, face_images_dir=None, database_path=None):
+        super().__init__()
+        self.config_manager = config_manager
+        self._local_args = (config_manager, sqlite_path, face_images_dir, database_path)
+        self._cloud_args = (config_manager,)
+        self.register(LocalFaceStore, name='local', display_name='本地存储',
+                      description='SQLite 人脸特征 + 本地图片目录（单机模式）', tags=['人脸', '存储'])
+        self.register(CloudFaceStore, name='cloud', display_name='云端存储',
+                      description='MySQL 人脸特征 + 对象存储 R2（云边分离模式）', tags=['人脸', '存储', '云端'])
+        self.discover()
+
+    def resolve(self):
+        """返回当前应使用的后端实例。"""
+        if self.config_manager.get_cloud_enabled():
+            return CloudFaceStore(*self._cloud_args)
+        return LocalFaceStore(*self._local_args)
+
+
 class DatabaseManagerBase:
     def __init__(self, database_path="./dd/face_database.pkl", sqlite_path="./dd/records.db", face_store=None):
         self.database_path = database_path
@@ -979,7 +1051,12 @@ class DatabaseManagerBase:
         mkdir_if_not_exists("./picture")
         mkdir_if_not_exists("./face_images")
         self.face_images_dir = "./face_images"
-        
+
+        # MySQL 连接失败后的退避截止时间，避免每次页面请求都阻塞重连
+        self._mysql_backoff_until = 0.0
+        # 后台重连探测间隔（秒）：期间内前台请求快速回退，由后台线程负责重试
+        self._mysql_probe_interval = 15
+
         # Initialize SQLite database
         self.init_sqlite_db()
         
@@ -997,6 +1074,10 @@ class DatabaseManagerBase:
         # 云边分离模式开关：True 时边缘端人脸写操作代理到云端（离线拒绝）
         self.cloud_enabled = self.config_manager.get_cloud_enabled()
         self._write_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+        # 启动后台 MySQL 重连探测线程：MySQL 暂不可达时，前台请求快速回退，
+        # 由该线程周期性重试，一旦连通自动清除退避，无需重启服务。
+        self._start_mysql_prober()
 
     def init_sqlite_db(self):
         """Initialize SQLite database tables and add new columns if missing"""
@@ -1180,6 +1261,30 @@ class DatabaseManagerBase:
         add_column_if_not_exists('admin_logs', 'device_id', 'TEXT')
         add_column_if_not_exists('admin_logs', 'sync_status', "TEXT DEFAULT 'pending'")
         add_column_if_not_exists('admin_logs', 'sync_timestamp', 'DATETIME')
+
+        # Agent Reports Table (巡检日报)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS agent_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_date TEXT,
+            title TEXT,
+            content TEXT,
+            status TEXT DEFAULT 'normal',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+
+        # Notify Rules Table (通知订阅规则)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS notify_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT UNIQUE,
+            channels TEXT,
+            enabled INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME
+        )
+        ''')
 
         # Faces Table (Encrypted)
         cursor.execute("PRAGMA table_info(faces)")
@@ -1417,21 +1522,87 @@ class DatabaseManagerBase:
             )
             ''')
 
+            # Agent Reports Table (巡检日报)
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS agent_reports (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                report_date VARCHAR(20),
+                title VARCHAR(255),
+                content TEXT,
+                status VARCHAR(20) DEFAULT 'normal',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+
+            # Notify Rules Table (通知订阅规则)
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS notify_rules (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                event_type VARCHAR(50) UNIQUE,
+                channels TEXT,
+                enabled TINYINT DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME
+            )
+            ''')
+
             conn.commit()
             conn.close()
             logger.info("MySQL database initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize MySQL: {e}")
 
+    def _start_mysql_prober(self):
+        """启动后台线程：周期探测 MySQL，可达时清除退避，实现无阻塞自动重连。"""
+        def _probe_loop():
+            while True:
+                time.sleep(self._mysql_probe_interval)
+                try:
+                    if self._mysql_reachable():
+                        self._mysql_backoff_until = 0.0
+                    else:
+                        # 保持退避，前台请求继续快速回退，等待下一次探测
+                        self._mysql_backoff_until = time.time() + self._mysql_probe_interval
+                except Exception as e:
+                    logger.debug(f"MySQL 后台探测异常: {e}")
+
+        threading.Thread(target=_probe_loop, daemon=True, name='mysql-prober').start()
+
+    def _mysql_reachable(self):
+        """后台探测：尝试建立一次 MySQL 连接，成功返回 True（连接随即关闭）。"""
+        if not pymysql:
+            return False
+        if self.config_manager.get_network_mode() == 'Offline':
+            return False
+        config = self.config_manager.get_mysql_config()
+        try:
+            conn = pymysql.connect(
+                host=config['host'],
+                user=config['user'],
+                password=config['password'],
+                database=config['database'],
+                port=config['port'],
+                connect_timeout=3,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            conn.close()
+            return True
+        except Exception:
+            return False
+
     def get_mysql_connection(self):
         if not pymysql:
             return None
         if self.config_manager.get_network_mode() == 'Offline':
             return None
-            
+
+        # 退避期内直接返回，避免 MySQL 不可达时每个页面请求都阻塞 3 秒重连
+        if time.time() < self._mysql_backoff_until:
+            return None
+
         config = self.config_manager.get_mysql_config()
         try:
-            return pymysql.connect(
+            conn = pymysql.connect(
                 host=config['host'],
                 user=config['user'],
                 password=config['password'],
@@ -1440,8 +1611,12 @@ class DatabaseManagerBase:
                 connect_timeout=3, # 短超时防止阻塞
                 cursorclass=pymysql.cursors.DictCursor
             )
+            self._mysql_backoff_until = 0.0
+            return conn
         except Exception as e:
             logger.error(f"Failed to connect to MySQL: {e}")
+            # 失败后进入退避期，前台快速回退；后台线程会继续重试
+            self._mysql_backoff_until = time.time() + self._mysql_probe_interval
             return None
 
     def get_all_devices(self):
@@ -1789,7 +1964,7 @@ class DatabaseManagerBase:
             if not os.path.exists(metadata_path):
                 try:
                     # Create a template metadata.yaml
-                    template_content = """# Device Metadata Configuration
+                    template_content = f"""# Device Metadata Configuration
 # This file provides static information about the device.
 # It will be merged with dynamically collected system information.
 # Any dynamically collected information (like IP, MAC, OS) will be overwritten by values here if provided.
@@ -1833,7 +2008,7 @@ digital_signature: ""
 
 # 6. Software Information (软件信息)
 software_name: "ArcFace Edge"
-software_version: "1.0.0"
+software_version: "{CURRENT_VERSION.tag}"
 software_vendor: "BioGuard"
 software_description: "Edge Facial Recognition Client"
 software_uuid: ""
@@ -1864,6 +2039,8 @@ install_path: ""
         
         # 3. Merge info (Static > Dynamic)
         info = {**dynamic_info, **static_info}
+        # 版本号以 version.py 的 CURRENT_VERSION 为准，忽略 metadata.yaml 中的过时值
+        info['software_version'] = CURRENT_VERSION.tag
         
         # 4. Update Local SQLite
         try:
@@ -2110,7 +2287,7 @@ install_path: ""
                 if deleted_rows:
                     for row in deleted_rows:
                         del_name, del_device_id = row
-                        url = f"http://{web_config['host']}:{web_config['port']}/api/face/{del_name}?device_id={del_device_id}"
+                        url = f"{web_config.get('protocol', 'http')}://{web_config['host']}:{web_config['port']}/api/face/{del_name}?device_id={del_device_id}"
                         try:
                             # Add auth headers if token exists
                             headers = {}
@@ -2166,7 +2343,7 @@ install_path: ""
                                 # The current API requires a file. So we skip.
                                 continue
                                 
-                            url = f"http://{web_config['host']}:{web_config['port']}/api/face/sync/push"
+                            url = f"{web_config.get('protocol', 'http')}://{web_config['host']}:{web_config['port']}/api/face/sync/push"
                             
                             # Add auth headers if token exists
                             headers = {}
@@ -2344,6 +2521,221 @@ install_path: ""
         except Exception as e:
             logger.error(f"Failed to add admin log: {e}")
             return False
+
+    def save_agent_report(self, report_date, title, content, status='normal'):
+        """保存巡检日报：写入 SQLite（本地缓存）+ MySQL（云端权威，若可用）。"""
+        try:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            # 1. SQLite 本地
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO agent_reports (report_date, title, content, status, created_at) VALUES (?, ?, ?, ?, ?)",
+                           (report_date, title, content, status, timestamp))
+            conn.commit()
+            conn.close()
+            # 2. MySQL 云端（若可用）
+            if pymysql:
+                mc = self.get_mysql_connection()
+                if mc:
+                    try:
+                        with mc.cursor() as cursor:
+                            cursor.execute("INSERT INTO agent_reports (report_date, title, content, status, created_at) VALUES (%s, %s, %s, %s, %s)",
+                                           (report_date, title, content, status, timestamp))
+                        mc.commit()
+                    except Exception as e:
+                        logger.error(f"Failed to save agent report to MySQL: {e}")
+                    finally:
+                        mc.close()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save agent report: {e}")
+            return False
+
+    def get_agent_reports(self, limit=100):
+        """获取巡检日报列表（倒序）。MySQL 优先，回退 SQLite。"""
+        if pymysql:
+            conn = self.get_mysql_connection()
+            if conn:
+                try:
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT id, report_date, title, content, status, created_at FROM agent_reports ORDER BY created_at DESC LIMIT %s", (limit,))
+                        rows = cursor.fetchall()
+                        result = []
+                        for row in rows:
+                            result.append({
+                                'id': row.get('id'),
+                                'report_date': row.get('report_date'),
+                                'title': row.get('title'),
+                                'content': row.get('content') or '',
+                                'status': row.get('status') or 'normal',
+                                'created_at': str(row.get('created_at')) if row.get('created_at') else None,
+                            })
+                        return result
+                except Exception as e:
+                    logger.error(f"Failed to fetch agent reports from MySQL: {e}")
+                finally:
+                    conn.close()
+
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, report_date, title, content, status, created_at FROM agent_reports ORDER BY created_at DESC LIMIT ?", (limit,))
+            rows = cursor.fetchall()
+            result = [dict(r) for r in rows]
+            conn.close()
+            return result
+        except Exception as e:
+            logger.error(f"Failed to fetch agent reports from SQLite: {e}")
+            return []
+
+    def get_agent_report(self, report_id):
+        """获取单条巡检日报。MySQL 优先，回退 SQLite。"""
+        if pymysql:
+            conn = self.get_mysql_connection()
+            if conn:
+                try:
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT id, report_date, title, content, status, created_at FROM agent_reports WHERE id = %s", (report_id,))
+                        row = cursor.fetchone()
+                        if row:
+                            return {
+                                'id': row.get('id'),
+                                'report_date': row.get('report_date'),
+                                'title': row.get('title'),
+                                'content': row.get('content') or '',
+                                'status': row.get('status') or 'normal',
+                                'created_at': str(row.get('created_at')) if row.get('created_at') else None,
+                            }
+                except Exception as e:
+                    logger.error(f"Failed to fetch agent report from MySQL: {e}")
+                finally:
+                    conn.close()
+
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, report_date, title, content, status, created_at FROM agent_reports WHERE id = ?", (report_id,))
+            row = cursor.fetchone()
+            conn.close()
+            return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Failed to fetch agent report from SQLite: {e}")
+            return None
+
+    def get_notify_rules(self):
+        """读取通知订阅规则。MySQL 优先，回退 SQLite。"""
+        if pymysql:
+            conn = self.get_mysql_connection()
+            if conn:
+                try:
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT id, event_type, channels, enabled, created_at, updated_at FROM notify_rules ORDER BY id")
+                        rows = cursor.fetchall()
+                        return [{
+                            'id': r.get('id'),
+                            'event_type': r.get('event_type'),
+                            'channels': r.get('channels') or '[]',
+                            'enabled': int(r.get('enabled') or 0),
+                            'created_at': str(r.get('created_at')) if r.get('created_at') else None,
+                            'updated_at': str(r.get('updated_at')) if r.get('updated_at') else None,
+                        } for r in rows]
+                except Exception as e:
+                    logger.error(f"Failed to fetch notify rules from MySQL: {e}")
+                finally:
+                    conn.close()
+
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, event_type, channels, enabled, created_at, updated_at FROM notify_rules ORDER BY id")
+            rows = cursor.fetchall()
+            conn.close()
+            return [{
+                'id': r['id'],
+                'event_type': r['event_type'],
+                'channels': r['channels'] or '[]',
+                'enabled': int(r['enabled'] or 0),
+                'created_at': str(r['created_at']) if r['created_at'] else None,
+                'updated_at': str(r['updated_at']) if r['updated_at'] else None,
+            } for r in rows]
+        except Exception as e:
+            logger.error(f"Failed to fetch notify rules from SQLite: {e}")
+            return []
+
+    def save_notify_rule(self, event_type, channels, enabled=True):
+        """新增/更新订阅规则（event_type 唯一）。channels 为 list 或 JSON 字符串。"""
+        import json as _json
+        if isinstance(channels, (list, tuple)):
+            channels_str = _json.dumps([c for c in channels if c], ensure_ascii=False)
+        else:
+            channels_str = str(channels or '[]')
+        enabled_int = 1 if enabled else 0
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO notify_rules (event_type, channels, enabled, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(event_type) DO UPDATE SET
+                    channels = excluded.channels,
+                    enabled = excluded.enabled,
+                    updated_at = excluded.updated_at
+            """, (event_type, channels_str, enabled_int, timestamp))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to save notify rule to SQLite: {e}")
+            return False
+
+        if pymysql:
+            mc = self.get_mysql_connection()
+            if mc:
+                try:
+                    with mc.cursor() as cursor:
+                        cursor.execute("""
+                            INSERT INTO notify_rules (event_type, channels, enabled, updated_at)
+                            VALUES (%s, %s, %s, %s)
+                            ON DUPLICATE KEY UPDATE
+                                channels = VALUES(channels),
+                                enabled = VALUES(enabled),
+                                updated_at = VALUES(updated_at)
+                        """, (event_type, channels_str, enabled_int, timestamp))
+                    mc.commit()
+                except Exception as e:
+                    logger.error(f"Failed to save notify rule to MySQL: {e}")
+                finally:
+                    mc.close()
+        return True
+
+    def delete_notify_rule(self, rule_id):
+        """删除订阅规则。SQLite + MySQL（若可用）。"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM notify_rules WHERE id = ?", (rule_id,))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to delete notify rule from SQLite: {e}")
+            return False
+
+        if pymysql:
+            mc = self.get_mysql_connection()
+            if mc:
+                try:
+                    with mc.cursor() as cursor:
+                        cursor.execute("DELETE FROM notify_rules WHERE id = %s", (rule_id,))
+                    mc.commit()
+                except Exception as e:
+                    logger.error(f"Failed to delete notify rule from MySQL: {e}")
+                finally:
+                    mc.close()
+        return True
 
     def get_attendance_records(self, limit=100, offset=0, start_date=None, end_date=None, search="", device_id=""):
         # First try to fetch from MySQL if configured
@@ -3087,9 +3479,9 @@ class SyncDatabaseManager(DatabaseManagerBase):
             return name, similarity, 'all', 'white'
         return None, 0, None, None
 
-    def sync_faces_from_remote(self, host, port):
+    def sync_faces_from_remote(self, host, port, protocol='http'):
         try:
-            url = f"http://{host}:{port}/api/face/sync/all?device_id={self.device_id}"
+            url = f"{protocol}://{host}:{port}/api/face/sync/all?device_id={self.device_id}"
             logger.info(f"Syncing faces from {url}...")
             response = requests.get(url, timeout=60)
             
@@ -3417,10 +3809,10 @@ class AsyncDatabaseManager(DatabaseManagerBase):
     def find_best_match(self, embedding, threshold=0.6, device_id=None):
         return self._find_best_match_sync(embedding, threshold, device_id)
 
-    def sync_faces_from_remote(self, host, port):
+    def sync_faces_from_remote(self, host, port, protocol='http'):
         # Use sync logic but wrapped if needed, or just block (it's a maintenance task)
         try:
-            url = f"http://{host}:{port}/api/face/sync/all?device_id={self.device_id}"
+            url = f"{protocol}://{host}:{port}/api/face/sync/all?device_id={self.device_id}"
             logger.info(f"AsyncManager: Syncing faces from {url}...")
             response = requests.get(url, timeout=60)
             
