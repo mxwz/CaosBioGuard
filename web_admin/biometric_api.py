@@ -130,6 +130,11 @@ def create_biometric_blueprint(config_manager, base_dir: str, url_prefix: str = 
     def _decode_strokes(payload: Dict[str, Any]) -> Optional[BioSample]:
         import cv2
         strokes = payload.get('strokes')
+        if isinstance(strokes, str):
+            try:
+                strokes = json.loads(strokes)
+            except Exception:
+                return None
         if not strokes:
             return None
         image = None
