@@ -83,6 +83,10 @@ app.register_blueprint(agent_bp)
 # MCP 适配层：与 OpenAPI 复用同一批工具，供 Claude/Cursor/Dify 等 MCP 客户端消费
 app.register_blueprint(mcp_bp)
 
+# 多生物特征 API：Web / 手机 PWA / 微信小程序共用（Bearer token 或管理员 session）
+from web_admin.biometric_api import create_biometric_blueprint
+app.register_blueprint(create_biometric_blueprint(config_manager, BASE_DIR))
+
 # 注册中心：统一登记并管理三类注册器（通知渠道 / 人脸存储后端 / Agent 工具）
 _notify_registry = init_notify_center(config_manager, db_manager)
 init_registry_center()
@@ -242,6 +246,10 @@ def check_auth():
 
     # Agent 工具层端点：由编排层以 token 调用，绕过 session 认证（P2 再加 token 校验）
     if request.path.startswith('/api/agent/'):
+        return None
+
+    # 多模态 API / 手机端 API：Blueprint 内部用 Bearer token 或 session 双向鉴权
+    if request.path.startswith('/api/biometrics/') or request.path.startswith('/api/mobile/'):
         return None
         
     if request.endpoint and request.endpoint not in allowed_endpoints:
@@ -973,6 +981,12 @@ def face_image(name):
 def face_compare():
     """Face Comparison Page"""
     return render_template('face_compare.html')
+
+
+@app.route('/biometrics')
+def biometrics():
+    """多生物特征管理页（非人脸模态；人脸仍走 /faces）"""
+    return render_template('biometrics.html')
 
 @app.route('/api/face_compare', methods=['POST'])
 def api_face_compare():

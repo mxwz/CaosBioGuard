@@ -1,0 +1,210 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h5 class="mb-1"><i class="fas fa-fingerprint me-2"></i>多模态识别</h5>
+        <div class="text-muted" style="font-size:.85rem;">声纹 / 指纹 / 虹膜 / 掌纹 / 静脉 / 步态 / 视网膜 / 签名；人脸仍由「人脸管理」维护。</div>
+    </div>
+    <button class="btn btn-outline-primary btn-sm" id="refreshBtn"><i class="fas fa-rotate me-1"></i>刷新</button>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="text-muted small">可用引擎</div><div class="stat-value" id="statEngines">—</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="text-muted small">模板总数</div><div class="stat-value" id="statTemplates">—</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="text-muted small">已注册主体</div><div class="stat-value" id="statSubjects">—</div></div></div></div>
+    <div class="col-md-3"><div class="card stat-card"><div class="card-body"><div class="text-muted small">存储</div><div class="stat-value" style="font-size:1rem;line-height:1.9;" id="statStore">—</div></div></div></div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header"><i class="fas fa-layer-group me-2"></i>模态可用性</div>
+    <div class="card-body">
+        <div class="modality-grid" id="modalityGrid"><span class="text-muted">加载中…</span></div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header"><i class="fas fa-user-plus me-2"></i>快速注册</div>
+            <div class="card-body">
+                <form id="enrollForm">
+                    <div class="mb-2">
+                        <label class="form-label">主体名称</label>
+                        <input class="form-control" name="subject" placeholder="姓名 / 工号" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">模态</label>
+                        <select class="form-select" name="modality" id="enrollModality"></select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">样本文件</label>
+                        <input class="form-control" type="file" name="file" id="enrollFile">
+                        <div class="form-text" id="hint">图片模态选图片；声纹选 WAV；步态选视频。</div>
+                    </div>
+                    <div class="mb-2 d-none" id="strokeWrap">
+                        <label class="form-label">签名轨迹 JSON（可选）</label>
+                        <textarea class="form-control" name="strokes" rows="3" placeholder='[[[x,y,t],...], ...]'></textarea>
+                    </div>
+                    <button class="btn btn-primary w-100" type="submit"><i class="fas fa-database me-1"></i>注册模板</button>
+                </form>
+                <pre class="mt-3 mb-0 text-muted" id="enrollResult" style="white-space:pre-wrap;font-size:.8rem;"></pre>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header"><i class="fas fa-shield-halved me-2"></i>1:N 验证</div>
+            <div class="card-body">
+                <form id="verifyForm" class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label">模态</label>
+                        <select class="form-select" name="modality" id="verifyModality"></select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">样本</label>
+                        <input class="form-control" type="file" name="file" id="verifyFile">
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-primary w-100" type="submit"><i class="fas fa-magnifying-glass me-1"></i>验证</button>
+                    </div>
+                </form>
+                <div class="mt-3" id="verifyResult"><span class="text-muted">等待验证…</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-users me-2"></i>已注册主体</span>
+        <span class="text-muted small" id="subjectCount"></span>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>主体</th><th>模态</th><th class="text-end">操作</th></tr></thead>
+            <tbody id="subjectRows"><tr><td colspan="3" class="text-center text-muted py-4">加载中…</td></tr></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const API = '/api/biometrics';
+    let specs = [];
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    async function call(path, opts) {
+        const res = await fetch(API + path, Object.assign({credentials: 'same-origin'}, opts || {}));
+        const data = await res.json().catch(() => ({status: 'error', error: 'invalid json'}));
+        if (!res.ok || data.status === 'error') throw new Error(data.error || ('HTTP ' + res.status));
+        return data.data;
+    }
+
+    function fillModalities() {
+        const enroll = document.getElementById('enrollModality');
+        const verify = document.getElementById('verifyModality');
+        const opts = specs.filter(s => s.name !== 'face').map(s =>
+            '<option value="' + s.name + '"' + (s.name === 'fingerprint' ? ' selected' : '') + '>' +
+            s.label + (s.available ? '' : '（不可用）') + '</option>'
+        ).join('');
+        enroll.innerHTML = opts;
+        verify.innerHTML = opts;
+        syncHint();
+    }
+
+    function syncHint() {
+        const m = document.getElementById('enrollModality').value;
+        const file = document.getElementById('enrollFile');
+        const hint = document.getElementById('hint');
+        const wrap = document.getElementById('strokeWrap');
+        wrap.classList.toggle('d-none', m !== 'signature');
+        if (m === 'voiceprint') { file.accept = '.wav,audio/wav'; hint.textContent = '上传 16kHz 左右单声道 WAV。'; }
+        else if (m === 'gait') { file.accept = 'video/*,.mp4,.avi,.mov'; hint.textContent = '上传 3~8 秒、全身入镜的步态视频。'; }
+        else { file.accept = 'image/*'; hint.textContent = '上传清晰的单张图片。'; }
+    }
+
+    async function loadAll() {
+        try {
+            const health = await call('/health');
+            document.getElementById('statEngines').textContent = health.available + ' / ' + health.engines;
+            document.getElementById('statStore').textContent = health.store.encrypted ? 'SQLite · 加密' : 'SQLite';
+            specs = await call('/modalities');
+            fillModalities();
+            document.getElementById('modalityGrid').innerHTML = specs.map(s =>
+                '<div class="modality-chip"><div class="name"><span class="dot ' + (s.available ? '' : 'off') + '"></span>' + esc(s.label) + '</div>' +
+                '<div class="tag mt-1">' + esc(s.name) + ' · 阈值 ' + (s.default_threshold != null ? Number(s.default_threshold).toFixed(2) : '—') + '</div>' +
+                '<div class="tag">' + (s.available ? '引擎就绪' : '依赖缺失') + '</div></div>'
+            ).join('');
+            const stats = await call('/stats');
+            document.getElementById('statTemplates').textContent = stats.total || 0;
+            const subjects = await call('/subjects');
+            document.getElementById('statSubjects').textContent = subjects.length;
+            document.getElementById('subjectCount').textContent = subjects.length + ' 人';
+            document.getElementById('subjectRows').innerHTML = subjects.length ? subjects.map(s =>
+                '<tr><td class="fw-semibold">' + esc(s.subject) + '</td><td>' + (s.modalities || []).map(m => '<span class="badge text-bg-secondary me-1">' + esc(m) + '</span>').join('') +
+                '</td><td class="text-end"><button class="btn btn-sm btn-outline-danger" data-del="' + esc(s.subject) + '"><i class="fas fa-trash"></i></button></td></tr>'
+            ).join('') : '<tr><td colspan="3" class="text-center text-muted py-4">尚无模板</td></tr>';
+        } catch (e) {
+            document.getElementById('modalityGrid').innerHTML = '<span class="text-danger">' + esc(e.message) + '</span>';
+        }
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', loadAll);
+    document.getElementById('enrollModality').addEventListener('change', syncHint);
+
+    document.getElementById('enrollForm').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        if (fd.get('strokes')) {
+            try { fd.set('strokes', JSON.stringify(JSON.parse(fd.get('strokes')))); } catch (e) {
+                document.getElementById('enrollResult').textContent = '签名轨迹不是合法 JSON';
+                return;
+            }
+        }
+        try {
+            const out = await call('/enroll', {method: 'POST', body: fd});
+            document.getElementById('enrollResult').textContent = JSON.stringify(out, null, 2);
+            loadAll();
+        } catch (e) {
+            document.getElementById('enrollResult').textContent = '注册失败：' + e.message;
+        }
+    });
+
+    document.getElementById('verifyForm').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        try {
+            const out = await call('/verify', {method: 'POST', body: fd});
+            const m = out.match || {};
+            const ok = !!out.passed;
+            const reason = (m.details && m.details.reason) || '';
+            document.getElementById('verifyResult').innerHTML =
+                '<div class="alert ' + (ok ? 'alert-success' : 'alert-warning') + ' mb-0">' +
+                (ok ? '<i class="fas fa-circle-check me-2"></i>匹配：<b>' + esc(m.subject) + '</b>' : '<i class="fas fa-circle-xmark me-2"></i>未匹配') +
+                '<div class="small mt-1">score=' + (m.score != null ? Number(m.score).toFixed(3) : '—') +
+                ' · ' + esc(reason) + '</div></div>';
+        } catch (e) {
+            document.getElementById('verifyResult').innerHTML = '<div class="alert alert-danger mb-0">' + esc(e.message) + '</div>';
+        }
+    });
+
+    document.getElementById('subjectRows').addEventListener('click', async function (ev) {
+        const btn = ev.target.closest('[data-del]');
+        if (!btn) return;
+        if (!confirm('删除 ' + btn.dataset.del + ' 的全部多模态模板？')) return;
+        try {
+            await call('/subjects/' + encodeURIComponent(btn.dataset.del), {method: 'DELETE'});
+            loadAll();
+        } catch (e) { alert('删除失败：' + e.message); }
+    });
+
+    loadAll();
+})();
+</script>
+{% endblock %}
