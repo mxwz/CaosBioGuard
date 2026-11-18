@@ -9,11 +9,11 @@ flask
 pillow
 pyyaml
 requests
-scikit-learn
 cryptography
 pymysql
 psutil
 markdown
-dotenv
+python-dotenv
 waitress
 boto3
+pyserial

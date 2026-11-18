@@ -263,6 +263,43 @@ FLASK_ENV=development
 
 ---
 
+## 🚀 0.2.0 新增能力（2026-11）
+
+### 边缘端 Kiosk（PySide6，继续沿用，不换框架）
+
+```powershell
+.\.venv\Scripts\python.exe -m sideUI.kiosk.app
+```
+
+- 5 个 Tab：识别 / 注册 / 多模态 / 记录 / 管理；设置全部收进管理员页，不再常驻、不再弹窗堆叠。
+- 4 套主题：深空青、极光紫、熔金橙、晨雾白；顶栏一键切换并持久化。
+- 采集与推理移出 UI 线程：`CameraWorker` + `InferenceWorker`（队列满丢帧），注册/验证走 `QThreadPool`。
+- 无摄像头自动进入演示流，方便展厅与开发调试；旧 `sideUI_unified.py` 保留回退。
+
+### 多生物特征
+
+`biometrics/` 包统一 9 个模态：人脸、声纹、指纹、虹膜、掌纹、静脉、步态、视网膜、签名。  
+支持质量门控、模板加密存储（Fernet）、1:N + margin、加权/任选/全通过融合、活体否决。  
+人脸继续使用 InsightFace；活体检测提供 `strict / degraded / off` 三档并显式审计降级原因。
+
+### Web 后台主题 + 多模态 API
+
+- 后台新增 4 套 CSS 变量主题与「多模态识别」页（`/biometrics`）。
+- API：`/api/biometrics/{health,modalities,subjects,stats,quality,enroll,verify}`，Bearer token 或管理员 session。
+- 样本支持图片 / WAV / 步态视频 / 签名轨迹；人脸仍走既有 `/faces`，避免双写。
+
+### 手机端与微信小程序
+
+- PWA：`http://<host>:5000/m/`，管理员登录后注册/查看全部记录，员工查看本人记录并提交采集申请。
+- 微信小程序：`mobile/miniprogram/`，用微信开发者工具导入，填写 `app.js` 的 `baseUrl` 与 `project.config.json` 的 AppID。
+
+### 云边同步与部署
+
+- `biometrics/sync.py`：SQLite Outbox + HMAC-SHA256 + 幂等键 + 指数退避 + 死信；协议见 `docs/cloud-edge-sync.md`。
+- PyInstaller：`packaging/build_windows.ps1`、`packaging/build_linux.sh`。
+- Docker：`docker compose up -d --build web`；边缘端 `docker compose --profile edge up -d --build edge`；说明见 `deploy/README.md`。
+
+---
 <div align="center">
   <b>&copy; 2026 Caos. All Rights Reserved.</b><br>
   <i>Empowering Future Access Control with AI.</i>

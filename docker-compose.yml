@@ -1,0 +1,79 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: caos-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-caos_root_pwd}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-caos_bioguard}
+      MYSQL_USER: ${MYSQL_USER:-caos}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-caos_pwd}
+      TZ: Asia/Shanghai
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./deploy/mysql/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    container_name: caos-web
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      FLASK_ENV: production
+      FLASK_PORT: "5000"
+      MYSQL_HOST: mysql
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-caos_bioguard}
+      MYSQL_USER: ${MYSQL_USER:-caos}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-caos_pwd}
+      TZ: Asia/Shanghai
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./config.ini:/app/config.ini:ro
+      - ./sideUI/dd:/app/sideUI/dd
+      - ./sideUI/face_images:/app/sideUI/face_images
+      - ./web_admin/uploads:/app/web_admin/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5000/login"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  edge:
+    profiles: ["edge"]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.edge
+    container_name: caos-edge
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      DISPLAY: ${DISPLAY:-:0}
+      QT_QPA_PLATFORM: xcb
+      TZ: Asia/Shanghai
+    network_mode: host
+    devices:
+      - /dev/video0:/dev/video0
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./config.ini:/app/config.ini:ro
+      - ./sideUI/dd:/app/sideUI/dd
+      - ./sideUI/face_images:/app/sideUI/face_images
+      - ${HOME}/.insightface:/root/.insightface:ro
+
+volumes:
+  mysql_data:

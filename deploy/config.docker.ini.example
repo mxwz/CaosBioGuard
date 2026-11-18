@@ -1,0 +1,77 @@
+; Caos BioGuard Docker / 新部署示例配置
+; 复制为 config.ini 后修改；不要提交真实密钥。
+[General]
+mode=standalone
+startmode=manual
+syncinterval=30
+configupdatedat=
+
+[Cloud]
+; 单机/边缘默认 false；要让 Web 使用 MySQL+R2 改为 true，并配置 [MySQL]/[S3]
+enabled=false
+host=
+user=
+password=
+database=
+lastenabled=false
+
+[S3]
+endpoint=
+access_key=
+secret_key=
+bucket=
+region=auto
+
+[MySQL]
+host=mysql
+user=caos
+password=caos_pwd
+database=caos_bioguard
+port=3306
+
+[Security]
+; 32 字节 urlsafe base64 的 Fernet key；留空会退化为明文并告警
+encryptionkey=
+
+[WebAdmin]
+host=0.0.0.0
+port=5000
+protocol=http
+; 手机端/小程序/Agent 调 API 用；生产务必替换
+token=change-me-to-a-long-random-token
+salt=change-me-salt
+
+[Templates]
+company=
+community=
+
+[Enums]
+gender=男,女,未知
+status=正常,迟到,早退,旷工,请假
+access_level=员工,访客,管理员
+property_type=住宅,商铺,办公
+resident_type=业主,租户,家属
+access_areas=大门,楼栋,电梯,停车场
+
+[UI]
+theme=obsidian
+
+[Kiosk]
+camera_index=0
+fullscreen=true
+threshold=0.45
+liveness_mode=degraded
+liveness_threshold=0.55
+cooldown=3
+device_id=edge-001
+company=Caos BioGuard
+admin_pin=123456
+
+[Sync]
+endpoint=
+secret=
+device_id=edge-001
+batch_size=20
+max_attempts=8
+base_delay=2
+timeout=8
