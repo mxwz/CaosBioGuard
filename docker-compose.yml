@@ -42,9 +42,11 @@ services:
       - "5000:5000"
     volumes:
       - ./config.ini:/app/config.ini:ro
+      - ./dd:/app/dd
       - ./sideUI/dd:/app/sideUI/dd
       - ./sideUI/face_images:/app/sideUI/face_images
       - ./web_admin/uploads:/app/web_admin/uploads
+      - ${HOME}/.insightface:/root/.insightface:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5000/login"]
       interval: 30s
@@ -71,6 +73,7 @@ services:
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ./config.ini:/app/config.ini:ro
+      - ./dd:/app/dd
       - ./sideUI/dd:/app/sideUI/dd
       - ./sideUI/face_images:/app/sideUI/face_images
       - ${HOME}/.insightface:/root/.insightface:ro

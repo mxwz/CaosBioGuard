@@ -12,9 +12,14 @@ import sys
 
 from PyInstaller.utils.hooks import collect_submodules
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+ROOT = os.path.abspath(os.path.join(SPECPATH, '..'))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+
+model_dir = os.path.expanduser(os.path.join('~', '.insightface', 'models', 'buffalo_l'))
+datas = []
+if os.path.isdir(model_dir):
+    datas.append((model_dir, os.path.join('insightface', 'models', 'buffalo_l')))
 
 hiddenimports = (
     collect_submodules('sideUI.kiosk')
@@ -27,7 +32,7 @@ a = Analysis(
     [os.path.join(ROOT, 'packaging', 'kiosk_entry.py')],
     pathex=[ROOT],
     binaries=[],
-    datas=[],
+    datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

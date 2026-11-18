@@ -15,10 +15,13 @@ picture/
 __pycache__/
 *.py[cod]
 .venv/
+.venv_migrated_*/
 venv/
 env/
 *.egg-info/
 .eggs/
+build/
+dist/
 
 # ===== IDE / 编辑器 =====
 .idea/

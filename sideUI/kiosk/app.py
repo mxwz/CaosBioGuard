@@ -452,9 +452,8 @@ class KioskWindow(QMainWindow):
         def job():
             from biometrics import BioSample
             from biometrics.engines.face import FaceEngine
-            from sideUI.face_core import get_face_analysis_model
-            model = get_face_analysis_model()
-            engine = FaceEngine(app=model)
+            engine = FaceEngine()
+            engine.get_face_app()
             tmpl = engine.extract(BioSample.image(frame))
             if tmpl.quality < 0.45:
                 raise ValueError(f'人脸质量不足（{tmpl.quality:.2f}），请正对光源重拍')

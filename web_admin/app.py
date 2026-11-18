@@ -156,32 +156,29 @@ logging.getLogger().addHandler(db_handler)
 
 # Initialize Face Analysis Model (Preload)
 def load_face_model():
-    """Load Face Analysis Model"""
+    """Load Face Analysis Model（CPU 环境自动降级，避免强制 CUDA）。"""
     if hasattr(app, 'face_app') and app.face_app is not None:
         return
-        
-    logger.info("Preloading Face Analysis Model... This may take a while.")
+
+    logger.info("Loading Face Analysis Model... This may take a while.")
     try:
-        from insightface.app import FaceAnalysis
-        # Use global variable for the app
-        face_app_instance = FaceAnalysis(providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
-        face_app_instance.prepare(ctx_id=0, det_size=(640, 640))
-        app.face_app = face_app_instance
+        from biometrics.engines.face import FaceEngine
+        app.face_app = FaceEngine().get_face_app()
         logger.info("Face Analysis Model loaded successfully.")
     except Exception as e:
         logger.error(f"Failed to load Face Analysis Model: {e}")
         app.face_app = None
 
-# Only preload in the child process when using reloader (WERKZEUG_RUN_MAIN='true')
-# Or if running in production (not __main__)
-# This prevents double loading in debug mode
-if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or __name__ != '__main__':
+# 默认懒加载，避免导入 Web 应用或运行测试时阻塞在模型下载上。
+# 需要启动即预热时，设置 CAOS_PRELOAD_FACE=1。
+app.face_app = None
+if (
+    os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+    or os.environ.get('CAOS_PRELOAD_FACE', '').lower() in ('1', 'true', 'yes')
+):
     load_face_model()
 else:
-    # In main process of reloader, or if debug=False (no reloader), we skip preload.
-    # If debug=False, it will lazy load on first request.
-    logger.info("Skipping model preload in main process/reloader parent.")
-    app.face_app = None
+    logger.info("Face model lazy loading enabled; set CAOS_PRELOAD_FACE=1 to preload.")
 
 # --- Auth Setup ---
 def hash_password(password, salt):
@@ -776,8 +773,7 @@ def add_face():
             # Read image for face detection
             import numpy as np
             import cv2
-            from insightface.app import FaceAnalysis
-            
+
             # Reset pointer
             file.seek(0)
             img_bytes = file.read()
@@ -788,13 +784,9 @@ def add_face():
                  flash('无效的图片文件', 'error')
                  return redirect(url_for('faces'))
             
-            # Use preloaded model
             if not hasattr(app, 'face_app') or app.face_app is None:
-                # Fallback to load
-                from insightface.app import FaceAnalysis
-                app.face_app = FaceAnalysis(providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
-                app.face_app.prepare(ctx_id=0, det_size=(640, 640))
-            
+                load_face_model()
+
             # Detect face
             faces = app.face_app.get(img)
             

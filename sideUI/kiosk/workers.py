@@ -193,8 +193,8 @@ class InferenceWorker(QThread):
         if self._model is not None:
             return
         try:
-            from sideUI.face_core import get_face_analysis_model
-            self._model = get_face_analysis_model()
+            from biometrics.engines.face import FaceEngine
+            self._model = FaceEngine().get_face_app()
             self.statusChanged.emit('人脸识别引擎已加载', True)
         except Exception as exc:
             self._model_error = str(exc)

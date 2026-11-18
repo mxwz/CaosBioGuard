@@ -89,6 +89,15 @@ class EngineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             engine.extract(BioSample.image(blank))
 
+    def test_face_preserves_bgr_channels(self):
+        engine = self.registry.resolve('face')
+        bgr = np.zeros((120, 160, 3), dtype=np.uint8)
+        out = engine._image(BioSample.image(bgr))
+        self.assertEqual(out.shape, (120, 160, 3))
+        gray = np.zeros((120, 160), dtype=np.uint8)
+        out = engine._image(BioSample.image(gray))
+        self.assertEqual(out.shape, (120, 160, 3))
+
     def test_specs_listed(self):
         specs = self.registry.specs()
         names = {s['name'] for s in specs}

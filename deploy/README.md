@@ -17,6 +17,7 @@ cp deploy/config.docker.ini.example config.ini
 docker compose up -d --build web
 # 访问 http://localhost:5000
 # 手机 PWA: http://localhost:5000/m/
+# Web 镜像已包含 InsightFace CPU 依赖，模型通过 ~/.insightface 挂载
 ```
 
 ## 3. 启用边缘端（需要 X11 与摄像头）

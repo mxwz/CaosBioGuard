@@ -5,7 +5,7 @@ UI、Web API、手机端、小程序都只调用这一层，避免各端各写�
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from .fusion import FusionPolicy, FusionResult, fuse
@@ -41,11 +41,26 @@ class BiometricService:
         self.registry = registry or BiometricRegistry()
         self.store = store
         self.liveness_policy = liveness_policy or LivenessPolicy()
-        self.pad_gate: Optional[FacePadGate] = None
+        self.pad_gate: Optional[FacePadGate] = self._build_default_gate()
+        self._sync_face_gate()
+
+    def _build_default_gate(self) -> FacePadGate:
+        from .liveness import FaceLivenessDetector
+        # 服务层可能收到单张图片，因此单帧也能给出结论；Kiosk 连续视频仍使用自己的多帧 Gate。
+        policy = replace(self.liveness_policy, consecutive=1)
+        return FacePadGate(FaceLivenessDetector(None, policy), policy)
+
+    def _sync_face_gate(self) -> None:
+        try:
+            self.registry.resolve('face').set_pad_gate(self.pad_gate)
+        except Exception:
+            pass
 
     def attach_pad_model(self, model: Any) -> FacePadGate:
         from .liveness import FaceLivenessDetector
-        self.pad_gate = FacePadGate(FaceLivenessDetector(model, self.liveness_policy), self.liveness_policy)
+        policy = replace(self.liveness_policy, consecutive=1)
+        self.pad_gate = FacePadGate(FaceLivenessDetector(model, policy), policy)
+        self._sync_face_gate()
         return self.pad_gate
 
     # ------------------------------------------------------------------

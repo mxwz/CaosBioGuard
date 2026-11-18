@@ -12,13 +12,16 @@ from __future__ import annotations
 
 import math
 import os
+import sys
 import threading
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
+import cv2
 
 from ..base import ImageEngine, TemplateGallery, clip01, cosine_score, ensure_gray, image_quality, l2norm
-from ..types import BioSample, BioTemplate, MatchResult, ModalitySpec, QualityReport
+from ..types import BioSample, BioTemplate, LivenessReport, MatchResult, ModalitySpec, QualityReport
 
 
 FACE_SPEC = ModalitySpec(
@@ -46,6 +49,7 @@ class FaceEngine(ImageEngine):
         self._ctx_id = ctx_id
         self._lock = threading.RLock()
         self._load_error = ''
+        self._pad_gate = None
 
     # ------------------------------------------------------------------
     # 模型
@@ -53,6 +57,19 @@ class FaceEngine(ImageEngine):
     def set_model(self, app: Any) -> None:
         """注入外部已加载的 FaceAnalysis 实例，避免重复加载。"""
         self._app = app
+
+    def get_face_app(self) -> Any:
+        """供 Kiosk 连续视频复用同一个 InsightFace 应用。"""
+        return self._ensure_model()
+
+    def _model_name_or_path(self) -> str:
+        """PyInstaller 离线包优先使用内置模型目录。"""
+        meipass = getattr(sys, '_MEIPASS', '')
+        if meipass:
+            bundled = Path(meipass) / 'insightface' / 'models' / self._model_name
+            if bundled.exists() and any(bundled.glob('*.onnx')):
+                return str(bundled)
+        return self._model_name
 
     def _ensure_model(self) -> Any:
         if self._app is not None:
@@ -75,17 +92,66 @@ class FaceEngine(ImageEngine):
                     ctx = 0 if 'CUDAExecutionProvider' in providers else -1
                 except Exception:
                     ctx = -1
-            app = FaceAnalysis(name=self._model_name)
+            app = FaceAnalysis(name=self._model_name_or_path())
             app.prepare(ctx_id=ctx, det_size=self._det_size)
             self._app = app
             return app
 
     def check_available(self) -> Tuple[bool, str]:
-        try:
-            self._ensure_model()
+        """状态检查只验证依赖和本地模型，不触发模型下载。
+
+        实际 enroll/verify 时仍由 ``_ensure_model`` 懒加载；这样健康检查、
+        页面渲染和测试不会阻塞在网络下载上。
+        """
+        if self._app is not None:
             return True, ''
+        if self._load_error:
+            return False, self._load_error
+        try:
+            import insightface  # noqa: F401
         except Exception as exc:
-            return False, str(exc)
+            return False, f'未安装 insightface: {exc}'
+        name_or_path = self._model_name_or_path()
+        model_path = Path(name_or_path) if Path(name_or_path).is_absolute() else Path.home() / '.insightface' / 'models' / name_or_path
+        if model_path.exists() and any(model_path.glob('*.onnx')):
+            return True, ''
+        return False, (
+            f'InsightFace 已安装，但 {self._model_name} 模型未就绪；'
+            '实际调用时将尝试加载或下载。'
+        )
+
+    def _image(self, sample: BioSample) -> np.ndarray:
+        """人脸引擎必须保留 BGR 三通道，不能使用通用图像引擎的灰度化。"""
+        if sample.kind != 'image':
+            raise ValueError(f'{self.label}需要图像样本，收到 {sample.kind}')
+        img = np.asarray(sample.data)
+        if img.ndim == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        elif img.ndim == 3 and img.shape[2] == 4:
+            img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+        elif img.ndim != 3 or img.shape[2] != 3:
+            raise ValueError(f'人脸图像格式无效，形状为 {img.shape}')
+        return np.ascontiguousarray(img)
+
+    def set_pad_gate(self, gate: Any) -> None:
+        self._pad_gate = gate
+
+    def liveness(self, sample: BioSample) -> LivenessReport:
+        """人脸 PAD：先检测人脸框，再交给 FacePadGate，不能走通用 disabled。"""
+        img = self._image(sample)
+        app = self._ensure_model()
+        with self._lock:
+            faces = app.get(img)
+        if not faces:
+            return LivenessReport(False, 0.0, 'detection', ['未检测到人脸，无法执行活体检测'])
+        face = max(faces, key=lambda f: float((f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])))
+        if self._pad_gate is None:
+            from ..liveness import FaceLivenessDetector, FacePadGate, LivenessPolicy
+            self._pad_gate = FacePadGate(
+                FaceLivenessDetector(None),
+                LivenessPolicy(consecutive=1),
+            )
+        return self._pad_gate.check(img, face.bbox, face.kps)
 
     # ------------------------------------------------------------------
     # 质量

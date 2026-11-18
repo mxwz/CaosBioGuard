@@ -2,6 +2,7 @@
 .gitignore
 .github
 .venv
+.venv_migrated_*
 venv
 __pycache__
 *.pyc
