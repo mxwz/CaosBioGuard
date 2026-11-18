@@ -1,0 +1,15 @@
+{
+  "name": "Caos BioGuard 移动端",
+  "short_name": "CaosGuard",
+  "description": "多模态门禁与考勤移动管理端",
+  "start_url": "/m/",
+  "scope": "/m/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070c12",
+  "theme_color": "#070c12",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/m/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

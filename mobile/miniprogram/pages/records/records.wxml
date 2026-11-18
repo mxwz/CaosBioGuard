@@ -1,0 +1,16 @@
+<view class="container">
+  <view wx:if="{{isAdmin}}" class="card">
+    <text class="label">按姓名筛选</text>
+    <input class="input" bindinput="onInput" bindconfirm="load" placeholder="留空查看全部" />
+    <button class="btn" bindtap="load" loading="{{loading}}">查询</button>
+  </view>
+
+  <view class="card">
+    <view class="row"><view class="title">记录</view><text class="tag">{{rows.length}} 条</text></view>
+    <view wx:for="{{rows}}" wx:key="id" class="item">
+      <view class="row"><text>{{item.user_name}}</text><text class="tag">{{item.status}}</text></view>
+      <view class="sub">{{item.device_id}} · {{item.timestamp}}</view>
+    </view>
+    <view wx:if="{{!rows.length}}" class="sub">暂无记录</view>
+  </view>
+</view>

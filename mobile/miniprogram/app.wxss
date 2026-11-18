@@ -1,0 +1,33 @@
+page {
+  background: #070c12;
+  color: #e8f5fb;
+  font-family: "PingFang SC", "Microsoft YaHei UI", sans-serif;
+}
+.container { padding: 24rpx; }
+.card {
+  background: rgba(16, 27, 40, .9);
+  border: 1rpx solid rgba(120, 210, 235, .16);
+  border-radius: 28rpx;
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+}
+.title { font-size: 34rpx; font-weight: 700; letter-spacing: 2rpx; }
+.sub { color: #6c8396; font-size: 24rpx; margin-top: 8rpx; }
+.label { color: #9db4c5; font-size: 24rpx; margin: 18rpx 0 8rpx; display: block; }
+.input {
+  background: #122233; color: #e8f5fb; border: 1rpx solid rgba(120, 210, 235, .16);
+  border-radius: 18rpx; padding: 20rpx; font-size: 28rpx;
+}
+.btn {
+  margin-top: 22rpx; background: linear-gradient(135deg, #22d3ee, #0ea5e9);
+  color: #041018; border-radius: 20rpx; font-weight: 700; font-size: 28rpx;
+}
+.btn-ghost { background: #122233; color: #9db4c5; border: 1rpx solid rgba(120, 210, 235, .16); }
+.row { display: flex; align-items: center; justify-content: space-between; }
+.stat-grid { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 20rpx; }
+.stat { width: calc(50% - 8rpx); box-sizing: border-box; background: #122233; border-radius: 20rpx; padding: 20rpx; }
+.stat-label { color: #6c8396; font-size: 22rpx; }
+.stat-value { color: #22d3ee; font-size: 40rpx; font-weight: 700; margin-top: 6rpx; }
+.tag { display: inline-block; padding: 6rpx 14rpx; border-radius: 999rpx; background: rgba(34, 211, 238, .1); color: #22d3ee; font-size: 22rpx; margin: 6rpx 8rpx 0 0; }
+.item { padding: 20rpx 0; border-bottom: 1rpx solid rgba(120, 210, 235, .1); }
+.item:last-child { border-bottom: none; }

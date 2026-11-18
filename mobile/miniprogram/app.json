@@ -1,0 +1,17 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/records/records",
+    "pages/enroll/enroll",
+    "pages/profile/profile"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#070c12",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "Caos BioGuard",
+    "backgroundColor": "#070c12",
+    "backgroundTextStyle": "dark"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

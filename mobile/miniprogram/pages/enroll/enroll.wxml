@@ -1,0 +1,28 @@
+<view class="container">
+  <view class="card">
+    <view class="title">注册 / 采集</view>
+    <view class="sub">{{isAdmin ? '管理员：直接写入本机模板库' : '员工：提交采集申请，由管理员完成高质量采集'}}</view>
+
+    <text class="label">主体</text>
+    <input class="input" value="{{subject}}" bindinput="onSubject" placeholder="姓名 / 工号" disabled="{{!isAdmin}}" />
+
+    <text class="label">模态</text>
+    <picker range="{{modalities}}" range-key="label" bindchange="onModality">
+      <view class="input">{{modalities[modalityIndex].label || '加载中…'}}</view>
+    </picker>
+
+    <view class="sub" style="margin-top:12rpx;">{{modalities[modalityIndex].description}}</view>
+
+    <text class="label">样本</text>
+    <button class="btn btn-ghost" bindtap="choose">{{filePath ? '已选择样本' : '选择文件 / 拍照 / 录像'}}</button>
+    <view wx:if="{{filePath}}" class="sub" style="word-break:break-all;">{{filePath}}</view>
+
+    <view wx:if="{{modalities[modalityIndex].kind === 'strokes'}}">
+      <text class="label">签名轨迹 JSON（与图片二选一）</text>
+      <textarea class="input" bindinput="onStrokes" placeholder='[[[x,y,t],...]]' auto-height />
+    </view>
+
+    <button class="btn" loading="{{busy}}" bindtap="submit">提交</button>
+    <view wx:if="{{result}}" class="sub" style="margin-top:16rpx;">{{result}}</view>
+  </view>
+</view>

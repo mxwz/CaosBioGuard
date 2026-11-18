@@ -1,0 +1,52 @@
+<view class="container">
+  <view wx:if="{{!logged}}" class="card">
+    <view class="title">CAOS BIOGUARD</view>
+    <view class="sub">多模态门禁 · 移动管理端</view>
+
+    <view class="row" style="margin-top:24rpx;">
+      <button class="btn {{mode === 'admin' ? '' : 'btn-ghost'}}" style="flex:1;margin:0 8rpx 0 0;" data-mode="admin" bindtap="switchMode">管理员</button>
+      <button class="btn {{mode === 'user' ? '' : 'btn-ghost'}}" style="flex:1;margin:0 0 0 8rpx;" data-mode="user" bindtap="switchMode">员工</button>
+    </view>
+
+    <view wx:if="{{mode === 'admin'}}">
+      <text class="label">API Token</text>
+      <input class="input" password data-field="token" bindinput="onInput" placeholder="WebAdmin token" />
+    </view>
+    <view wx:else>
+      <text class="label">工号 / 姓名</text>
+      <input class="input" data-field="subject" bindinput="onInput" placeholder="例如：张三 / A1001" />
+    </view>
+
+    <button class="btn" loading="{{loading}}" bindtap="login">进入工作台</button>
+    <view class="sub" style="margin-top:18rpx;">管理员可注册模板、查看全部记录；员工仅查看本人记录并提交采集申请。</view>
+  </view>
+
+  <block wx:else>
+    <view class="card">
+      <view class="row"><view class="title">今日概览</view><text class="tag">{{role === 'admin' ? '管理员' : '员工'}}</text></view>
+      <view class="stat-grid">
+        <view class="stat"><view class="stat-label">今日打卡</view><view class="stat-value">{{stats.today}}</view></view>
+        <view class="stat"><view class="stat-label">人员</view><view class="stat-value">{{stats.users}}</view></view>
+        <view class="stat"><view class="stat-label">模板</view><view class="stat-value">{{stats.templates}}</view></view>
+        <view class="stat"><view class="stat-label">待审申请</view><view class="stat-value">{{stats.requests}}</view></view>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="row"><view class="title">快捷操作</view><button class="tag" bindtap="loadOverview">刷新</button></view>
+      <button class="btn btn-ghost" bindtap="goRecords">考勤记录</button>
+      <button class="btn btn-ghost" bindtap="goEnroll">注册 / 采集</button>
+      <button class="btn btn-ghost" bindtap="goProfile">我的身份</button>
+      <button class="btn btn-ghost" bindtap="logout">退出登录</button>
+    </view>
+
+    <view class="card">
+      <view class="title">最近通行</view>
+      <view wx:for="{{overview.recent}}" wx:key="id" class="item">
+        <view class="row"><text>{{item.user_name}}</text><text class="tag">{{item.status}}</text></view>
+        <view class="sub">{{item.device_id}} · {{item.timestamp}}</view>
+      </view>
+      <view wx:if="{{!overview.recent.length}}" class="sub">暂无记录</view>
+    </view>
+  </block>
+</view>

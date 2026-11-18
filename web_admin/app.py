@@ -86,6 +86,8 @@ app.register_blueprint(mcp_bp)
 # 多生物特征 API：Web / 手机 PWA / 微信小程序共用（Bearer token 或管理员 session）
 from web_admin.biometric_api import create_biometric_blueprint
 app.register_blueprint(create_biometric_blueprint(config_manager, BASE_DIR))
+from web_admin.mobile_api import create_mobile_blueprint
+app.register_blueprint(create_mobile_blueprint(config_manager, db_manager, BASE_DIR))
 
 # 注册中心：统一登记并管理三类注册器（通知渠道 / 人脸存储后端 / Agent 工具）
 _notify_registry = init_notify_center(config_manager, db_manager)
@@ -238,7 +240,7 @@ app.permanent_session_lifetime = timedelta(days=1)
 def check_auth():
     """Check authentication before request"""
     # Allow API endpoints to bypass session auth (they should use tokens if needed, but for now we open them for client sync)
-    allowed_endpoints = ['login', 'static', 'face_image', 'sync_config', 'api_face_sync_push', 'api_face_sync_all', 'api_face_delete', 'sync_now']
+    allowed_endpoints = ['login', 'static', 'face_image', 'sync_config', 'api_face_sync_push', 'api_face_sync_all', 'api_face_delete', 'sync_now', 'mobile_app']
     
     # We must explicitly allow the delete method, since the endpoint name might be generated differently
     if request.path.startswith('/api/face/') and request.method == 'DELETE':
@@ -987,6 +989,17 @@ def face_compare():
 def biometrics():
     """多生物特征管理页（非人脸模态；人脸仍走 /faces）"""
     return render_template('biometrics.html')
+
+
+MOBILE_DIR = os.path.join(BASE_DIR, 'mobile')
+
+
+@app.route('/m')
+@app.route('/m/')
+@app.route('/m/<path:filename>')
+def mobile_app(filename='index.html'):
+    """手机端 PWA（与后台同源，免额外域名）"""
+    return send_from_directory(MOBILE_DIR, filename)
 
 @app.route('/api/face_compare', methods=['POST'])
 def api_face_compare():

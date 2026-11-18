@@ -1,0 +1,19 @@
+<view class="container">
+  <view class="card">
+    <view class="title">{{subject || '未登录'}}</view>
+    <view class="sub">多模态身份档案</view>
+    <view style="margin-top:16rpx;">
+      <text wx:for="{{modalities}}" wx:key="*this" class="tag">{{item}}</text>
+      <text wx:if="{{!modalities.length}}" class="sub">尚未注册模板</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="title">最近记录</view>
+    <view wx:for="{{recent}}" wx:key="id" class="item">
+      <view class="row"><text>{{item.device_id}}</text><text class="tag">{{item.status}}</text></view>
+      <view class="sub">{{item.timestamp}}</view>
+    </view>
+    <view wx:if="{{!recent.length}}" class="sub">暂无记录</view>
+  </view>
+</view>

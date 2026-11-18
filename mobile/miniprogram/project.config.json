@@ -1,0 +1,16 @@
+{
+  "description": "Caos BioGuard 移动端",
+  "packOptions": { "ignore": [] },
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.6.0",
+  "appid": "touristappid",
+  "projectname": "caos-bioguard-mobile",
+  "miniprogramRoot": "./"
+}
