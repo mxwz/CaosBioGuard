@@ -23,3 +23,8 @@ env/
 # ===== IDE / 编辑器 =====
 .idea/
 .vscode/
+
+# ===== docx / 开发文档 =====
+docs/*
+!docs/cloud-edge-sync.md
+!docs/biometrics-api.md
