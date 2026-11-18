@@ -104,8 +104,8 @@ class VersionInfo:
 
 
 # 当前项目版本号：每次发布更新时只需修改此处
-CURRENT_VERSION = VersionInfo(0, 1, 3, ReleaseType.DEV)
+CURRENT_VERSION = VersionInfo(0, 2, 0, ReleaseType.DEV)
 # version.py 最后一行
-# CURRENT_VERSION = VersionInfo(0, 1, 3)                         # 正式版 v0.1.3
-# CURRENT_VERSION = VersionInfo(0, 1, 3, ReleaseType.BETA)       # 预览版 v0.1.3-beta
-# CURRENT_VERSION = VersionInfo(0, 1, 3, ReleaseType.DEV)        # 开发版 v0.1.3-dev
+# CURRENT_VERSION = VersionInfo(0, 2, 0)                         # 正式版 v0.2.0
+# CURRENT_VERSION = VersionInfo(0, 2, 0, ReleaseType.BETA)       # 预览版 v0.2.0-beta
+# CURRENT_VERSION = VersionInfo(0, 2, 0, ReleaseType.DEV)        # 开发版 v0.2.0-dev
