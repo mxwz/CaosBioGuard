@@ -141,7 +141,13 @@ python -m web_admin.app
 边缘端可执行文件：
 
 ```powershell
-pyinstaller packaging/edge_kiosk.spec --clean --noconfirm
+.\packaging\build_windows.ps1 -Clean
+```
+
+Inno Setup 安装包：
+
+```powershell
+ISCC packaging/windows_installer.iss
 ```
 
 容器部署：
@@ -153,12 +159,14 @@ docker compose --env-file deploy/docker.env -f deploy/docker-compose.yml up -d
 相关文件：
 
 - `packaging/edge_kiosk.spec`
+- `packaging/windows_installer.iss`
 - `deploy/Dockerfile`
 - `deploy/docker-compose.yml`
 - `deploy/deployment.md`
 
 ## 7. 文档导航
 
+- [运行流程与模式切换](docs/run-modes.md)
 - [应用说明](docs/application-guide.md)
 - [部署模式说明](docs/deployment-modes.md)
 - [硬件端设计说明](docs/hardware-design.md)

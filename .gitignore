@@ -48,3 +48,4 @@ docs/*
 !docs/hardware-design.md
 !docs/application-guide.md
 !docs/vendor-sdk-backends.md
+!docs/run-modes.md

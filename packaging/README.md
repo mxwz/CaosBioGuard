@@ -16,6 +16,22 @@
 部署时仍需单独提供 `config.ini`（相机、阈值、活体模式、`[WebAdmin]`、`[Sync]`），
 不要把含密钥的配置打进安装包；可选挂载旧 `dd/face_database.pkl`。
 
+## Windows 安装包（Inno Setup）
+
+先完成 PyInstaller 构建：
+
+```powershell
+.\packaging\build_windows.ps1 -Clean
+```
+
+安装 Inno Setup 后执行：
+
+```powershell
+ISCC packaging/windows_installer.iss
+```
+
+产物：`dist/installer/CaosBioGuardKioskSetup.exe`
+
 ## Linux / 树莓派
 
 ```bash
@@ -28,6 +44,10 @@ bash packaging/build_linux.sh
 ```bash
 sudo apt install -y libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0
 ```
+
+## Android APK
+
+PySide6 与 PyInstaller 不能直接生成 APK。当前手机端是 PWA 和微信小程序；若要 APK，推荐用 Capacitor 包装现有 `mobile/`，并安装 JDK、Android Studio 和 Android SDK。详细流程见 `docs/run-modes.md`。
 
 ## 注意
 

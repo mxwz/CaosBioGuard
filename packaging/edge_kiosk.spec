@@ -25,7 +25,8 @@ hiddenimports = (
     collect_submodules('sideUI.kiosk')
     + collect_submodules('ui_kit')
     + collect_submodules('biometrics')
-    + ['version', 'managers', 'registry']
+    + collect_submodules('hardware')
+    + ['version', 'managers', 'registry', 'deployment']
 )
 
 a = Analysis(
