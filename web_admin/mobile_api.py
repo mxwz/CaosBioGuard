@@ -34,8 +34,8 @@ def create_mobile_blueprint(config_manager, db_manager, base_dir: str,
                             url_prefix: str = '/api/mobile') -> Blueprint:
     bp = Blueprint('mobile_api', __name__, url_prefix=url_prefix)
     base = Path(base_dir)
-    store = BioTemplateStore(str(base / 'dd' / 'biometrics.db'))
-    registry = build_biometric_registry()
+    store = BioTemplateStore(str(base / 'dd' / 'biometrics.db'), config_manager=config_manager)
+    registry = build_biometric_registry(config_manager=config_manager)
     requests_path = base / 'dd' / 'mobile_enroll_requests.json'
 
     def _web_token() -> str:

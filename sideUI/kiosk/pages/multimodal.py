@@ -56,9 +56,9 @@ class MultimodalPage(QWidget):
         super().__init__(parent)
         self.config = config
         self.repo = repo
-        self.registry = build_biometric_registry()
+        self.registry = build_biometric_registry(config_manager=config)
         self.store = getattr(repo, 'bio_store', None)
-        self.service = BiometricService(self.registry, self.store) if self.store else None
+        self.service = BiometricService(self.registry, self.store, config_manager=config) if self.store else None
         self._current: Optional[str] = None
         self._frame: Optional[np.ndarray] = None
         self._sample: Optional[BioSample] = None

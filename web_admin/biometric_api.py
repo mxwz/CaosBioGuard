@@ -32,9 +32,9 @@ FACE_MODALITIES = {'face'}
 def create_biometric_blueprint(config_manager, base_dir: str, url_prefix: str = '/api/biometrics') -> Blueprint:
     bp = Blueprint('biometric_api', __name__, url_prefix=url_prefix)
     base = Path(base_dir)
-    store = BioTemplateStore(str(base / 'dd' / 'biometrics.db'))
-    registry = build_biometric_registry()
-    service = BiometricService(registry, store)
+    store = BioTemplateStore(str(base / 'dd' / 'biometrics.db'), config_manager=config_manager)
+    registry = build_biometric_registry(config_manager=config_manager)
+    service = BiometricService(registry, store, config_manager=config_manager)
 
     def _token_ok() -> bool:
         if session.get('logged_in'):

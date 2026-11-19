@@ -9,9 +9,10 @@
     service = BiometricService(registry, store)
     service.enroll('张三', 'voiceprint', [BioSample.audio(wav, sr)])
 
-设计文档见 ``docs/MULTI_BIOMETRICS.md``。
+设计文档见 ``docs/biometrics-api.md`` 与 ``docs/hardware-design.md``。
 """
 
+from .adapters import GenericSDKAdapter, HybridEngine, VendorAdapter, VendorAdapterRegistry, normalize_template
 from .base import ImageEngine, ModalityEngine, ScoreCalibrator, TemplateGallery, cosine_score, l2norm
 from .fusion import FusionPolicy, FusionResult, evaluate_thresholds, fuse
 from .liveness import (ActiveChallenge, FaceLivenessDetector, FacePadGate, LivenessPolicy,
@@ -25,6 +26,8 @@ from .types import (BioSample, BioTemplate, LivenessReport, MatchResult, Modalit
 __all__ = [
     'BioSample', 'BioTemplate', 'QualityReport', 'MatchResult', 'LivenessReport', 'ModalitySpec',
     'ModalityEngine', 'ImageEngine', 'TemplateGallery', 'ScoreCalibrator',
+    'VendorAdapter', 'GenericSDKAdapter', 'VendorAdapterRegistry', 'HybridEngine',
+    'normalize_template',
     'BiometricRegistry', 'build_biometric_registry',
     'BiometricService', 'EnrollResult',
     'BioTemplateStore', 'StoredTemplate', 'TemplateCipher',

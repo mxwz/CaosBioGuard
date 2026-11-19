@@ -24,6 +24,11 @@ network_scope=lan
 topology=integrated
 public_base_url=
 
+[BiometricBackends]
+; auto=优先可用 SDK 并允许模型回退；model=强制模型；sdk=强制 SDK；fusion=双后端融合
+default_policy=auto
+allow_fallback=true
+
 [S3]
 endpoint=
 access_key=
@@ -99,3 +104,45 @@ unlock_duration=3
 alarm_duration=30
 reader_protocol=wiegand26
 lock_name=door-lock
+
+; 厂商 SDK 默认关闭；接入真实设备时 enabled=true，并按 SDK 包装方式填写
+[VendorSDK.fingerprint]
+enabled=false
+vendor=example
+mode=python
+python_class=vendor_adapters.FingerprintAdapter
+template_format=iso19794-2
+sdk_version=1.0
+
+[VendorSDK.iris]
+enabled=false
+vendor=example
+mode=python
+python_class=vendor_adapters.IrisAdapter
+template_format=iso19794-6
+sdk_version=1.0
+
+[VendorSDK.palmprint]
+enabled=false
+vendor=example
+mode=python
+python_class=vendor_adapters.PalmprintAdapter
+template_format=vendor
+sdk_version=1.0
+
+[VendorSDK.vein]
+enabled=false
+vendor=example
+mode=python
+python_class=vendor_adapters.VeinAdapter
+template_format=vendor
+sdk_version=1.0
+
+[VendorSDK.retina]
+enabled=false
+vendor=example
+mode=python
+python_class=vendor_adapters.RetinaAdapter
+template_format=vendor
+sdk_version=1.0
+; command 模式示例：mode=command，command=C:/sdk/caos_sdk_wrapper.exe，args=--device finger-01

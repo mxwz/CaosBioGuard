@@ -37,9 +37,11 @@ class EnrollResult:
 class BiometricService:
     def __init__(self, registry: Optional[BiometricRegistry] = None,
                  store: Optional[BioTemplateStore] = None,
-                 liveness_policy: Optional[LivenessPolicy] = None):
-        self.registry = registry or BiometricRegistry()
+                 liveness_policy: Optional[LivenessPolicy] = None,
+                 config_manager: Any = None):
+        self.registry = registry or BiometricRegistry(config_manager=config_manager)
         self.store = store
+        self.config_manager = config_manager
         self.liveness_policy = liveness_policy or LivenessPolicy()
         self.pad_gate: Optional[FacePadGate] = self._build_default_gate()
         self._sync_face_gate()
@@ -92,6 +94,23 @@ class BiometricService:
                                 detail={'accepted': len(templates)})
 
         final = engine.aggregate(templates) if len(templates) > 1 else templates[0]
+        if getattr(engine, 'policy', '') == 'fusion' and hasattr(engine, 'extract_all') and self.store:
+            chosen = next((sample for sample in samples if engine.quality(sample).passed), None)
+            if chosen is not None:
+                backend_templates = engine.extract_all(chosen)
+                saved_backends = []
+                total_bytes = 0
+                for backend_template in backend_templates:
+                    backend_name = backend_template.meta.get('backend', 'model')
+                    if self.store.save(subject, backend_template, device_id, backend=backend_name):
+                        saved_backends.append(backend_name)
+                    total_bytes += backend_template.size_bytes()
+                return EnrollResult(
+                    ok=True, subject=subject, modality=modality,
+                    quality=float(final.quality), samples=len(backend_templates),
+                    template_bytes=total_bytes, issues=issues,
+                    detail={'backends': saved_backends, 'fusion': True},
+                )
         if self.store is not None:
             saved = self.store.save(subject, final, device_id=device_id)
             if not saved:
@@ -156,8 +175,14 @@ class BiometricService:
         per_modality = {}
         for modality, sample in samples.items():
             engine = self.registry.resolve(modality)
-            tmpl = self.store.load(subject, modality, device_id)
-            if tmpl is None:
+            if getattr(engine, 'policy', '') == 'fusion':
+                backend_templates = [
+                    tmpl for backend in ('model', 'sdk')
+                    if (tmpl := self.store.load(subject, modality, device_id, backend=backend)) is not None
+                ]
+            else:
+                backend_templates = [self.store.load(subject, modality, device_id)]
+            if not backend_templates:
                 per_modality[modality] = {'error': '该用户未注册此模态'}
                 if (policy or FusionPolicy()).rule == 'all':
                     liveness_all = False
@@ -167,9 +192,22 @@ class BiometricService:
             if not ok:
                 liveness_all = False
                 continue
-            r = self.match_one(modality, sample, device_id, candidates=[(subject, tmpl)],
-                               require_liveness=False)
-            r.subject = subject
+            backend_results = []
+            for tmpl in backend_templates:
+                r = self.match_one(modality, sample, device_id, candidates=[(subject, tmpl)],
+                                   require_liveness=False)
+                r.subject = subject
+                backend_results.append(r)
+            if len(backend_results) > 1:
+                r = MatchResult(
+                    modality=modality,
+                    score=float(sum(x.score for x in backend_results) / len(backend_results)),
+                    threshold=float(sum(x.threshold for x in backend_results) / len(backend_results)),
+                    passed=all(x.passed for x in backend_results), subject=subject,
+                    details={'backend_results': [x.to_dict() for x in backend_results]},
+                )
+            else:
+                r = backend_results[0]
             results.append(r)
             per_modality[modality].update(r.to_dict())
         fusion = fuse(results, policy or FusionPolicy(rule='all'), liveness_ok=liveness_all)
@@ -191,6 +229,8 @@ class BiometricService:
     def stats(self) -> Dict[str, Any]:
         return {
             'registry': self.registry.specs(),
+            'vendor_backends': self.registry.vendor_registry.describe()
+            if getattr(self.registry, 'vendor_registry', None) else None,
             'store': self.store.stats() if self.store else None,
             'liveness': self.liveness_policy.to_dict(),
             'pad_model': bool(self.pad_gate and self.pad_gate.detector.has_model),

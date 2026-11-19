@@ -162,6 +162,7 @@ docker compose --env-file deploy/docker.env -f deploy/docker-compose.yml up -d
 - [应用说明](docs/application-guide.md)
 - [部署模式说明](docs/deployment-modes.md)
 - [硬件端设计说明](docs/hardware-design.md)
+- [模型与厂商 SDK 双后端说明](docs/vendor-sdk-backends.md)
 - [云边同步协议](docs/cloud-edge-sync.md)
 - [多生物识别 API](docs/biometrics-api.md)
 - [Web 服务端文档](web_admin/README.md)
