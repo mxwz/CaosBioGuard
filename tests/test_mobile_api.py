@@ -6,6 +6,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from datetime import datetime
 
 from flask import Flask
 
@@ -32,7 +33,8 @@ class _DB:
 
     def get_attendance_records(self, limit=100, offset=0, start_date=None,
                                 end_date=None, search='', device_id=''):
-        return [(1, search or '张三', '2026-11-18 09:01:00', '正常', '', 'edge-1', 'synced', None)]
+        today = datetime.now().strftime('%Y-%m-%d')
+        return [(1, search or '张三', f'{today} 09:01:00', '正常', '', 'edge-1', 'synced', None)]
 
 
 class MobileApiTests(unittest.TestCase):

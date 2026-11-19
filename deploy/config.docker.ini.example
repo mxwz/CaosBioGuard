@@ -2,6 +2,8 @@
 ; 复制为 config.ini 后修改；不要提交真实密钥。
 [General]
 mode=standalone
+; offline/online；离线时本地识别并写入 outbox，恢复网络后同步
+networkmode=offline
 startmode=manual
 syncinterval=30
 configupdatedat=
@@ -14,6 +16,13 @@ user=
 password=
 database=
 lastenabled=false
+
+[Deployment]
+; operation_mode: offline/online；network_scope: lan/public；topology: integrated/separated
+operation_mode=offline
+network_scope=lan
+topology=integrated
+public_base_url=
 
 [S3]
 endpoint=
@@ -40,6 +49,8 @@ protocol=http
 ; 手机端/小程序/Agent 调 API 用；生产务必替换
 token=change-me-to-a-long-random-token
 salt=change-me-salt
+; 逗号分隔跨域白名单，例如 https://guard.example.com；空表示仅同源
+cors_origins=
 
 [Templates]
 company=
@@ -75,3 +86,16 @@ batch_size=20
 max_attempts=8
 base_delay=2
 timeout=8
+
+[Hardware]
+enabled=true
+; simulator=无硬件联调，serial=串口/USB 继电器
+mode=simulator
+serial_port=COM3
+baudrate=9600
+open_command=A0 01 01 A2
+close_command=A0 01 00 A1
+unlock_duration=3
+alarm_duration=30
+reader_protocol=wiegand26
+lock_name=door-lock

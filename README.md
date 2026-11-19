@@ -1,306 +1,177 @@
-<div align="center" markdown="1">
+<div align="center">
 
 <img src="logo.png" alt="Caos BioGuard Logo" width="128" />
 
-# 🔮 Caos BioGuard
-**智能分布式人脸门禁与考勤管理系统 | Distributed Face Recognition System**
+# Caos BioGuard
 
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
+**多生物识别考勤与门禁系统 | Multi-Biometric Attendance & Access Control**
+
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/flask-%23000.svg?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![PySide6](https://img.shields.io/badge/PySide6-41CD52?style=for-the-badge&logo=qt&logoColor=white)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 
-> 基于 `InsightFace` 和 `PyTorch` 的高性能人脸识别系统。完美融合了 **云端集中管理** 与 **边缘实时计算**，支持跨平台（PC/树莓派）部署，为您打造极具未来感的无感通行与考勤体验。
-
-[**English Version**](README_en.md) | [**进入服务端文档**](web_admin/README.md) | [**进入边缘端文档**](sideUI/README.md)
-
 </div>
 
----
+## 1. 系统简介
 
-## 🧭 系统导航 (Documentation Portal)
+CaosBioGuard 是一套覆盖边缘终端、Web 管理端、PWA/手机端和微信小程序的考勤与门禁系统。系统支持离线本地识别、在线统一管理、云边同步、硬件门锁控制和容器化部署，适用于工厂、园区、社区、实验室和办公场景。
 
-本系统采用彻底的**云边解耦**架构，为了提供最清晰的指引，我们将文档拆分为了两个专属的独立模块。请根据您的需求进入对应的文档查看详细说明与部署指南：
+当前内置 9 类生物识别模态：
 
-### ☁️ [Web 服务端 (Web Admin Server) ➔](web_admin/README.md)
-系统的“大脑”。提供全局可视化大屏、人员特征统管、考勤与门禁日志分析、设备参数远程下发配置等功能。
-- 架构：`Flask` + `MySQL` + `Jinja2`
-- 适用场景：云服务器、本地数据中心
+| 类别 | 模态 |
+|---|---|
+| 视觉/人脸 | 人脸、虹膜、视网膜、步态、掌纹、签名 |
+| 语音 | 声纹 |
+| 外部采集器 | 指纹、静脉 |
 
-### 👁️ [边缘识别端 (Edge AI Device) ➔](sideUI/README.md)
-系统的“感官”。部署在闸机或物理入口，提供毫秒级离线人脸识别、活体防伪拦截、实时语音播报与异步断网缓存功能。
-- 架构：`PySide6` + `InsightFace` + `PyTorch` + `SQLite`
-- 适用场景：Windows PC、带摄像头的 x86 主机、树莓派 (Raspberry Pi)
+完整模态为：人脸、声纹、指纹、虹膜、掌纹、静脉、步态、视网膜、签名。人脸链路基于 InsightFace 与 ONNX Runtime；其他模态已完成离线软件接口、模板存储和合成数据链路验证，真实精度需接入对应硬件和厂商 SDK 后评估。
 
----
+## 2. 架构总览
 
-## 🔗 云边端协同架构
-
-系统在数据同步与存储上做了大量深度优化，即使在弱网环境下也能稳定运行。
-
-- **🗄️ 混合存储模型**：边缘端采用 `SQLite` + 本地图片哈希存储，保证毫秒级鉴权响应；服务端依托 `MySQL` 进行海量数据持久化。
-- **📡 双向数据同步 (Bi-directional Sync)**：
-  - **上行**：边缘端产生的考勤记录、门禁日志、活体检测报警通过后台线程平滑上传至服务器。
-  - **下行**：服务端下发的配置更改、新注册人脸、设备管理员权限、软删除指令实时下发至对应的边缘设备。
-- **🛡️ 数据隔离与安全**：引入 `device_id` 机制，不同的边缘设备只拉取属于自己的人脸特征与配置，实现终端数据的物理隔离。全局软删除机制防止误删数据丢失。
-
----
-
-## 📊 竞品分析与功能优势
-
-与其他常见的门禁考勤方案相比，本系统在架构设计与功能扩展性上具有显著优势：
-
-| 功能维度 | 🔮 Caos BioGuard (本系统) | 传统 IC/NFC 门禁系统 | 纯云端人脸识别 API |
-| :--- | :--- | :--- | :--- |
-| **识别方式** | 人脸 | 卡片/NFC | 图片/视频流 |
-| **边缘计算** | √ | × | × |
-| **活体检测** | √ | × | × |
-| **离线可用性** | √ | √ | × |
-| **云端集中管控** | √ | × | √ |
-| **硬件成本** | 低 | 中 | 高 |
-| **二次开发** | 高 | 低 | 中 |
-
----
-
-## 🗺️ 未来规划 (Roadmap)
-
-我们致力于将系统打造为**软硬件结合的多生物特征综合感知与管理平台**。未来将不仅局限于考勤与门禁，更将向广阔的 AIoT 场景延伸：
-
-- **🧬 多生物特征融合 (Multi-Biometrics)**：引入指纹、掌静脉、虹膜、声纹等识别模态，支持多因子组合认证（如人脸+掌静脉），满足极高安全场景需求。
-- **🤖 大模型与多模态交互 (LLM Integration)**：接入本地或云端大语言模型，赋予边缘终端智能语音问答、访客接待、无障碍语音引导等前沿能力。
-- **🌐 全场景 IoT 联动 (IoT Ecosystem)**：扩展 MQTT 等物联网协议，联动智能家居、楼宇自控、环境监测、安防监控等海量外围设备。
-
----
-
-## 🛠️ 环境依赖注意事项 (Environment & Dependencies)
-
-本项目依赖 `PyTorch` 进行模型推理：
-- **GPU 版本（推荐）**：请务必前往 [PyTorch 官网 (https://pytorch.org/)](https://pytorch.org/) 自行安装对应的 GPU 版本，以确保最佳性能。
-- **CPU 版本**：如果您使用纯 CPU 环境，请务必自行安装 `onnx` 的 CPU 版本以及 `PyTorch` 的 CPU 版本，否则可能会遇到运行报错。
-
-> 💡 **边缘端数据库配置提示**：
-> 边缘端（SideUI）在连接服务端的 MySQL 数据库时，**请勿使用**服务端的 `127.0.0.1` 或 `localhost`（这会指向边缘设备自己）。您必须使用服务端在**局域网（LAN IP）**或**公网（Public IP）**上的真实 IP 地址，确保边缘端能够正确跨网络连接到服务端数据库。
-
----
-
-## 🔖 版本号管理 (Version Management)
-
-整个项目的版本号统一由根目录 **[version.py](version.py)** 维护，避免版本号散落多处。其它模块（如 `managers.py`、`metadata.yaml`）一律引用它，发版时**只需修改 `version.py` 末尾的 `CURRENT_VERSION` 一处**即可。
-
-版本号遵循语义化版本 `v{major}.{minor}.{patch}`，并区分两种版本形态：
-
-| 形态 | 示例 | 说明 |
-| :--- | :--- | :--- |
-| **正式版 (Release)** | `v0.1.3` | 功能完善且无严重漏洞的版本 |
-| **预览版 (Beta)** | `v0.1.3-beta` | 后续可能推出的内测版 |
-
-```python
-# version.py 末尾
-CURRENT_VERSION = VersionInfo(0, 1, 3)                         # 正式版 v0.1.3
-CURRENT_VERSION = VersionInfo(0, 1, 3, ReleaseType.BETA)       # 预览版 v0.1.3-beta
-CURRENT_VERSION = VersionInfo(0, 1, 3, ReleaseType.DEV)        # 开发版 v0.1.3-dev
+```text
+┌─────────────────────────────┐
+│ 边缘 Kiosk：PySide6 + ONNX  │
+│ 本地识别 / 活体 / 硬件控制   │
+└──────────────┬──────────────┘
+               │ SQLite outbox / HMAC / 幂等同步
+┌──────────────▼──────────────┐
+│ Web 服务：Flask + Waitress   │
+│ 人员 / 模板 / 考勤 / 设备 API │
+└───────┬──────────────┬──────┘
+        │              │
+┌───────▼──────┐ ┌─────▼──────────────────────┐
+│ PWA/手机端    │ │ 微信小程序：管理员/用户双角色 │
+└──────────────┘ └────────────────────────────┘
 ```
 
----
+核心目录：
 
-## 🔐 配置文件与隐私字段说明 (Configuration & Privacy)
+| 路径 | 说明 |
+|---|---|
+| `biometrics/` | 9 模态识别、融合、活体、模板存储、同步 outbox |
+| `sideUI/kiosk/` | PySide6 高科技 Kiosk、Tab 页面、线程池和数据层 |
+| `web_admin/` | Flask Web 后台、多模态 API、移动端 API |
+| `mobile/` | PWA 与微信小程序 |
+| `hardware/` | 门锁、继电器、门磁、出门按钮、报警器硬件抽象 |
+| `deployment.py` | 离线/在线、局域网/公网、集成/分离模式校验 |
+| `packaging/` | PyInstaller 打包配置 |
+| `deploy/` | Dockerfile、Compose、配置模板和部署说明 |
 
-项目的**密钥、数据库密码、访问令牌**等隐私信息统一存放在以下本地配置文件中。**这些文件严禁上传到公开仓库**（请加入 `.gitignore`）。若仓库未包含这些文件（例如首次部署 / 从源码重建），你需要按下方字段自行创建，否则服务无法正常初始化。
+## 3. 部署模式
 
-### 1. 根目录 `config.ini`
+系统使用三个正交维度描述部署：
 
-| 键 | 说明 | 是否隐私 |
-| :--- | :--- | :--- |
-| `[General] mode` | 业务模式（Attendance / Access） | 否 |
-| `[General] startmode` | 启动模式（Sync 等） | 否 |
-| `[General] syncinterval` | 数据同步间隔（秒） | 否 |
-| `[General] networkmode` | 网络模式（Online / Offline） | 否 |
-| `[Cloud] enabled` | 云边分离模式开关（true / false） | 否 |
-| `[Cloud] host / user / database` | 云端数据库连接信息 | 否 |
-| `[Cloud] password` | 云端数据库密码 | **隐私** |
-| `[MySQL] host / user / database / port` | MySQL 连接信息 | 否 |
-| `[MySQL] password` | MySQL 密码 | **隐私** |
-| `[S3] endpoint` | R2/S3 端点（**不含** bucket 路径） | 否 |
-| `[S3] access_key / secret_key` | R2/S3 API 访问令牌 | **隐私** |
-| `[S3] bucket` | 存储桶名称 | 否 |
-| `[S3] region` | 区域（Cloudflare R2 固定填 `auto`） | 否 |
-| `[Security] encryptionkey` | 人脸特征加密密钥（Fernet） | **隐私** |
-| `[WebAdmin] host / port` | 后台监听地址 / 端口 | 否 |
-| `[WebAdmin] protocol` | 访问协议（http / https，默认 http） | 否 |
-| `[WebAdmin] token / salt` | 后台登录令牌（哈希）与盐 | **隐私** |
-| `[WebAdmin] sessiontimeout` | 登录会话空闲超时（分钟，默认 10） | 否 |
-| `[Templates]` / `[Enums]` | 业务模板与枚举字典 | 否 |
-
-### 2. `web_admin/.env`
-
-由 `web_admin/app.py` 通过 `load_dotenv` 读取，用于设置 Flask 运行环境：
-
-| 键 | 说明 | 默认值 | 是否隐私 |
-| :--- | :--- | :--- | :--- |
-| `FLASK_PORT` | 后台监听端口 | `5000` | 否 |
-| `FLASK_ENV` | 运行环境（development / production） | `development` | 否 |
-
-> 💡 上述 `access_key`、`secret_key`、`password`、`token`、`salt`、`encryptionkey` 均为敏感信息，提交代码或打包分发前请务必移除 / 脱敏。
-
-### 3. 快速配置模板（复制即用）
-
-将下面内容保存为根目录 `config.ini`（`<...>` 处替换为你的真实值；留空的密钥项会在首次运行时自动生成）：
+- `operation_mode`：`offline` / `online`
+- `network_scope`：`lan` / `public`
+- `topology`：`integrated` / `separated`
 
 ```ini
-[General]
-mode = Attendance
-startmode = Sync
-syncinterval = 30
-
-[Cloud]
-enabled = False
-host = localhost
-user = root
-password =
-database = arcface_cloud
-
-[S3]
-endpoint = https://<account_id>.r2.cloudflarestorage.com
-access_key = <your_r2_access_key_id>
-secret_key = <your_r2_secret_access_key>
-bucket = face-images
-region = auto
-
-[MySQL]
-host = 127.0.0.1
-user = root
-password = <your_mysql_password>
-database = face_recognition
-port = 3306
-
-[Security]
-# 留空则首次运行时自动生成 Fernet 加密密钥
-encryptionkey =
-
-[WebAdmin]
-host = 0.0.0.0
-port = 6100
-# 访问协议：http 或 https（域名部署建议 https）
-protocol = http
-# 留空则首次启动时自动生成登录令牌并打印到控制台
-token =
-salt =
-# 登录会话空闲超时（分钟），默认 10
-sessiontimeout = 10
-
-[Templates]
-company = name:text:姓名:false, gender:enum:性别:false, id_card:text:身份证号:false, phone:text:联系电话:false, email:text:电子邮箱:false, employee_id:text:工号:false, department:text:部门:false, position:text:职位:false, hire_date:date:入职日期:false, status:enum:员工状态:false, access_level:enum:门禁权限级别:false, validity_period:datetime:有效期:false, note:text:备注:false
-community = name:text:姓名:false, gender:enum:性别:false, id_card:text:身份证号:false, phone:text:联系电话:false, email:text:电子邮箱:false, building_no:text:楼栋号:false, unit_no:text:单元号:false, room_no:text:房号:false, property_type:enum:房产性质:false, owner_name:text:业主姓名:false, resident_type:enum:人员类型:false, access_areas:multiselect:通行区域:false, validity_period:datetime:有效期:false, note:text:备注:false
-
-[Enums]
-gender = 男,女,其他
-status = 在职,离职,休假,调岗,实习,待入职,停薪留职,退休
-access_level = 1-普通员工,2-管理层,3-受限区域,4-临时员工,5-承包商,6-访客,7-实习生,8-其他
-property_type = 自有,租赁,国有,集体所有,联营企业,股份制企业,港澳台投资,涉外房产,其他
-resident_type = 业主,家属,租客,访客,物业,施工,其他
-access_areas = 大门,单元门,地下室
+[Deployment]
+operation_mode=offline
+network_scope=lan
+topology=integrated
+public_base_url=
 ```
 
-将下面内容保存为 `web_admin/.env`：
+典型模式：
+
+| 场景 | 推荐配置 |
+|---|---|
+| 单机无网门禁 | 离线 + 局域网 + 集成 |
+| 多边缘终端、中心统一审计 | 在线/可离线降级 + 局域网 + 分离 |
+| 手机端或小程序公网访问 | 在线 + 公网 + 分离，HTTPS 反向代理 |
+| 演示或开发 | 仿真硬件 + 离线集成 |
+
+配置校验：
+
+```bash
+python deployment.py
+```
+
+详见 [部署模式说明](docs/deployment-modes.md)。
+
+## 4. 硬件联动
+
+`hardware/` 提供：
+
+- 仿真继电器：无硬件时联调；
+- 串口继电器：按配置发送十六进制开门/关门命令；
+- Wiegand26 编码：外部读卡器适配；
+- 门磁、出门按钮、报警器和外部读卡器健康状态；
+- Kiosk 识别通过后自动调用解锁。
+
+示例：
 
 ```ini
-FLASK_PORT=6100
-FLASK_ENV=development
+[Hardware]
+enabled=true
+mode=simulator
+serial_port=COM3
+baudrate=9600
+open_command=A0 01 01 A2
+close_command=A0 01 00 A1
+unlock_duration=3
 ```
 
-### 4. 域名 / HTTPS 部署
+详见 [硬件端设计说明](docs/hardware-design.md)。
 
-云端 Web 后台监听 `0.0.0.0`，可通过 IP 或域名访问。域名部署的完整链路：
-
-1. **域名解析**：将域名 DNS 解析到服务器公网 IP。
-2. **反向代理**：用 Nginx / Caddy 把 `80/443` 转发到 Flask 的 `6100` 端口，并配置 HTTPS 证书。
-3. **边缘端配置**：在 SideUI 设置页中：
-   - 协议：选择 `https`（或按反向代理实际协议选择 `http`）
-   - 服务器地址：填域名（如 `cloud.example.com`）或 IP
-   - 端口：填反向代理对外端口（如 `443` 或自定义）
-
-> 💡 边缘端既支持 IP 也支持域名，本质都是同一个「地址」字符串；关键在于「协议」要与反向代理一致（https 需已配置证书），端口要与对外端口一致。
-
----
-
-## 🤝 贡献与支持
-
-加入交流群获取最新动态或技术支持：
-- **QQ 交流群**：[1097302953](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=ge-5kwGOs3JswxbRp7UErPvQATEuR44f&authKey=u7dTn3rxfzC5J27Ev2pE8rzK3Y2NB%2F0VzzCAd9GXHpgdQr%2FIuOyBg0CBL1ry14h4&noverify=0&group_code=1097302953)
-
-欢迎开发者提交 Issue 或 Pull Request 来共同完善这个项目！
-1. **Fork** 本项目
-2. 创建您的特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交您的更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 **Pull Request**
-
-> 📝 **贡献者协议 (CLA) 与收益共享说明**：
-> 鉴于本项目采用双重授权模式，当您提交 Pull Request 时，即表示您同意将您贡献代码的商业许可权（Commercial Licensing Rights）授予本项目发起人（Caos），以便我们能够向企业提供闭源商业授权。
-> 💰 **开源激励承诺**：为感谢社区的付出，若本项目未来产生商业授权收益，我们将提取部分合理比例的净收益，建立**开源贡献者激励基金**，并根据核心贡献者（Core Contributors）的代码提交质量与工作量进行回馈划分。您依然保留对您贡献代码的原始署名权。
-
----
-
-## 📄 协议与授权 (License)
-
-本项目采用 **[Apache License 2.0](LICENSE)** 协议开源。您可以自由地使用、修改和分发本项目代码，但需遵守协议中的相关规定。
-
-> ⚠️ **注意**：本项目边缘端 UI 依赖了 `PySide6`，该库基于 LGPLv3 协议。在进行商业分发时，请确保您遵守了 LGPLv3 的相关动态链接与开源义务。
->
-> 🔐 **发布签名 (Release Signing)**：本项目的发布版本（Release）使用 GPG 签名以确保真实性与完整性，签名与验证流程请参见 **[RELEASE_GUIDE.md](RELEASE_GUIDE.md)**。
->
-> 验证签名前请先导入本项目公钥：`gpg --import pubkey.asc`（公钥文件见 **[pubkey.asc](pubkey.asc)**）。
-
-### ⚠️ 严格免责与使用条款 (Strict Disclaimer & Terms of Use)
-
-请务必阅读完整的 **[DISCLAIMER.md](DISCLAIMER.md)** 文件。以下为核心摘要：
-
-1. **项目用途**：本项目为**研究自用**性质的工程验证项目，并非开箱即用的商业产品。
-2. **免责声明**：因使用本软件造成的任何直接或间接损失（包括但不限于数据泄露、业务中断等），作者**不承担任何责任**。本软件按“原样（AS IS）”提供。
-3. **禁止事项**：**禁止**将本软件用于任何非法活动（如非法监控）；**禁止**移除项目中的版权和商标声明。
-4. **生物数据隐私**：实际部署时，**必须**自行确保完全符合当地个人信息保护法律法规（如 PIPL、GDPR）。
-
----
-
-## 🚀 0.2.0 新增能力（2026-11）
-
-### 边缘端 Kiosk（PySide6，继续沿用，不换框架）
+## 5. 快速开始
 
 ```powershell
-.\.venv\Scripts\python.exe -m sideUI.kiosk.app
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements-edge.txt
+python -m pytest -q
+python -m sideUI.kiosk.app
 ```
 
-- 5 个 Tab：识别 / 注册 / 多模态 / 记录 / 管理；设置全部收进管理员页，不再常驻、不再弹窗堆叠。
-- 4 套主题：深空青、极光紫、熔金橙、晨雾白；顶栏一键切换并持久化。
-- 采集与推理移出 UI 线程：`CameraWorker` + `InferenceWorker`（队列满丢帧），注册/验证走 `QThreadPool`。
-- 无摄像头自动进入演示流，方便展厅与开发调试；旧 `sideUI_unified.py` 保留回退。
+Web 服务：
 
-### 多生物特征
+```powershell
+pip install -r requirements-web.txt
+python -m web_admin.app
+```
 
-`biometrics/` 包统一 9 个模态：人脸、声纹、指纹、虹膜、掌纹、静脉、步态、视网膜、签名。  
-支持质量门控、模板加密存储（Fernet）、1:N + margin、加权/任选/全通过融合、活体否决。  
-人脸继续使用 InsightFace；活体检测提供 `strict / degraded / off` 三档并显式审计降级原因。
+默认配置适合本地开发。生产环境必须替换默认 token、HMAC secret、管理员 PIN，并在公网模式下启用 HTTPS。
 
-### Web 后台主题 + 多模态 API
+## 6. 打包与 Docker
 
-- 后台新增 4 套 CSS 变量主题与「多模态识别」页（`/biometrics`）。
-- API：`/api/biometrics/{health,modalities,subjects,stats,quality,enroll,verify}`，Bearer token 或管理员 session。
-- 样本支持图片 / WAV / 步态视频 / 签名轨迹；人脸仍走既有 `/faces`，避免双写。
+边缘端可执行文件：
 
-### 手机端与微信小程序
+```powershell
+pyinstaller packaging/edge_kiosk.spec --clean --noconfirm
+```
 
-- PWA：`http://<host>:5000/m/`，管理员登录后注册/查看全部记录，员工查看本人记录并提交采集申请。
-- 微信小程序：`mobile/miniprogram/`，用微信开发者工具导入，填写 `app.js` 的 `baseUrl` 与 `project.config.json` 的 AppID。
+容器部署：
 
-### 云边同步与部署
+```bash
+docker compose --env-file deploy/docker.env -f deploy/docker-compose.yml up -d
+```
 
-- `biometrics/sync.py`：SQLite Outbox + HMAC-SHA256 + 幂等键 + 指数退避 + 死信；协议见 `docs/cloud-edge-sync.md`。
-- PyInstaller：`packaging/build_windows.ps1`、`packaging/build_linux.sh`。
-- Docker：`docker compose up -d --build web`；边缘端 `docker compose --profile edge up -d --build edge`；说明见 `deploy/README.md`。
+相关文件：
 
----
-<div align="center">
-  <b>&copy; 2026 Caos. All Rights Reserved.</b><br>
-  <i>Empowering Future Access Control with AI.</i>
-</div>
+- `packaging/edge_kiosk.spec`
+- `deploy/Dockerfile`
+- `deploy/docker-compose.yml`
+- `deploy/deployment.md`
+
+## 7. 文档导航
+
+- [应用说明](docs/application-guide.md)
+- [部署模式说明](docs/deployment-modes.md)
+- [硬件端设计说明](docs/hardware-design.md)
+- [云边同步协议](docs/cloud-edge-sync.md)
+- [多生物识别 API](docs/biometrics-api.md)
+- [Web 服务端文档](web_admin/README.md)
+- [边缘端历史文档](sideUI/README.md)
+
+## 8. 当前能力边界
+
+- 非人脸模态的合成数据验证只证明软件链路可运行，不代表真实硬件精度。
+- 指纹、虹膜、掌纹、静脉、视网膜等需要真实采集设备和厂商 SDK。
+- 启发式活体不能替代专用 PAD 模型、双目或 3D 防伪设备。
+- 仿真继电器不会产生真实开门动作，生产前必须完成真机验收。
+- 小程序真机上线需要 AppID、HTTPS 域名和合法服务器域名配置。
+- 强电接线、消防联动和现场安装应由具备资质的人员实施。

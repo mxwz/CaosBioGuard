@@ -75,6 +75,12 @@ class KioskConfig:
     def get_bool(self, section: str, key: str, fallback: bool = False) -> bool:
         return self.get(section, key, '1' if fallback else '0').strip().lower() in ('1', 'true', 'yes', 'on')
 
+    def get_section(self, section: str) -> Dict[str, str]:
+        with self._lock:
+            if not self._parser.has_section(section):
+                return {}
+            return dict(self._parser[section])
+
     def set(self, section: str, key: str, value: Any) -> None:
         with self._lock:
             if section not in self._parser:

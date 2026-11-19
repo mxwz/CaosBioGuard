@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QHBoxLayout, QLa
 
 from ui_kit import (AnimatedStackedWidget, Card, IconTabBar, KioskBackground, StatusPill,
                     THEME_MANAGER, Toast, theme_names)
+from hardware import HardwareManager
 from version import CURRENT_VERSION
 
 from .data import EdgeEvent, EventStore, KioskConfig, SubjectRepository
@@ -128,6 +129,7 @@ class KioskWindow(QMainWindow):
         self._camera: Optional[CameraWorker] = None
         self._demo: Optional[DemoStreamWorker] = None
         self._inference: Optional[InferenceWorker] = None
+        self.hardware: Optional[HardwareManager] = None
         self._admin_unlocked = False
         self._shutting_down = False
         self._last_emit: Dict[str, float] = {}
@@ -146,6 +148,8 @@ class KioskWindow(QMainWindow):
         self.setWindowTitle('Caos BioGuard · 多模态门禁终端')
         self.resize(1440, 900)
         self._build_ui()
+        if self.config.get_bool('Hardware', 'enabled', True):
+            self.hardware = HardwareManager.from_config(self.config)
         self._apply_theme(self.config.get('UI', 'theme', 'obsidian'), persist=False)
         self._start_threads()
 
@@ -439,6 +443,8 @@ class KioskWindow(QMainWindow):
                 device_id=self.config.get('Kiosk', 'device_id', ''),
                 detail=result.reason or ('活体 %.2f' % result.liveness)))
             self._refresh_stats()
+            if result.passed and self.hardware is not None:
+                self.hardware.unlock()
         self._result_clear_timer.start(2600)
 
     def _clear_result(self) -> None:
@@ -547,6 +553,11 @@ class KioskWindow(QMainWindow):
                 pass
         try:
             QApplication.processEvents()
+        except Exception:
+            pass
+        try:
+            if self.hardware is not None:
+                self.hardware.shutdown()
         except Exception:
             pass
         try:

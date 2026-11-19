@@ -1,33 +1,49 @@
-# ===== 隐私配置（含密钥/令牌，禁止上传）=====
-config.ini
-web_admin/.env
-
-# ===== 本地数据库与生成数据 =====
-dd/
-sideUI/dd/
-face_images/
-picture/
-*.pkl
-*.db
-*.sqlite3
-
 # ===== Python =====
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ===== 虚拟环境 =====
 .venv/
 .venv_migrated_*/
 venv/
 env/
-*.egg-info/
 .eggs/
+
+# ===== 构建产物 =====
 build/
 dist/
+*.spec.bak
+*.log
 
-# ===== IDE / 编辑器 =====
+# ===== 本地配置 / 隐私 =====
+config.ini
+config.local.ini
+web_admin/.env
+*.db-journal
+*.sqlite-journal
+*.db
+*.sqlite3
+*.pkl
+face_images/
+picture/
+dd/
+sideUI/dd/
+
+# ===== IDE / OS =====
 .idea/
 .vscode/
+.DS_Store
+Thumbs.db
 
 # ===== docx / 开发文档 =====
 docs/*
 !docs/cloud-edge-sync.md
 !docs/biometrics-api.md
+!docs/deployment-modes.md
+!docs/hardware-design.md
+!docs/application-guide.md
