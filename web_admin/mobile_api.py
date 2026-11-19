@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import json
 import os
+import hmac
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, session
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from biometrics import BioTemplateStore, build_biometric_registry
 
@@ -50,13 +52,42 @@ def create_mobile_blueprint(config_manager, db_manager, base_dir: str,
             return auth.replace('Bearer ', '').strip()
         return request.headers.get('X-Auth-Token', '').strip()
 
+    def _user_serializer() -> URLSafeTimedSerializer:
+        return URLSafeTimedSerializer(current_app.secret_key, salt='caos-mobile-user')
+
+    def _known_subjects() -> set:
+        getter = getattr(db_manager, 'get_all_names', None)
+        if callable(getter):
+            try:
+                return set(getter() or [])
+            except Exception:
+                return set()
+        return set()
+
+    def _user_pin(subject: str) -> str:
+        pins = config_manager.get_section('UserPins') or {}
+        return str(pins.get(subject) or pins.get(subject.lower()) or '')
+
+    def _user_from_token() -> Optional[str]:
+        token = _provided_token()
+        if not token:
+            return None
+        try:
+            data = _user_serializer().loads(token, max_age=7 * 24 * 3600)
+            subject = str(data.get('subject') or '')
+            if subject and (not _known_subjects() or subject in _known_subjects()):
+                return subject
+        except (BadSignature, SignatureExpired):
+            return None
+        return None
+
     def _role() -> Optional[str]:
         if session.get('logged_in'):
             return 'admin'
         token = _web_token()
         if token and _provided_token() == token:
             return 'admin'
-        if request.headers.get('X-Mobile-Subject') or request.args.get('subject'):
+        if _user_from_token():
             return 'user'
         return None
 
@@ -67,8 +98,9 @@ def create_mobile_blueprint(config_manager, db_manager, base_dir: str,
 
     def _subject(role: str) -> str:
         if role == 'admin':
-            return (request.args.get('subject') or request.headers.get('X-Mobile-Subject') or '').strip()
-        return (request.args.get('subject') or request.headers.get('X-Mobile-Subject') or '').strip()
+            return (request.args.get('subject')
+                    or request.headers.get('X-Mobile-Subject') or '').strip()
+        return _user_from_token() or ''
 
     def _read_requests() -> List[Dict[str, Any]]:
         with _LOCK:
@@ -98,20 +130,46 @@ def create_mobile_blueprint(config_manager, db_manager, base_dir: str,
         payload = request.get_json(silent=True) or request.form
         token = str(payload.get('token') or _provided_token())
         subject = str(payload.get('subject') or '').strip()
+        pin = str(payload.get('pin') or '').strip()
         if token and token == _web_token():
             session['logged_in'] = True
             session['user'] = 'admin'
             return jsonify({'status': 'ok', 'data': {'role': 'admin', 'subject': 'admin'}})
-        if subject:
-            # 轻量身份：移动端用户以工号/姓名进入，仅能查看自己的记录与模板
-            return jsonify({'status': 'ok', 'data': {'role': 'user', 'subject': subject}})
-        return jsonify({'status': 'error', 'error': '缺少 token 或 subject'}), 401
+        if not subject or not pin:
+            return jsonify({'status': 'error', 'error': '缺少 subject 或 pin'}), 400
+        known = _known_subjects()
+        if known and subject not in known:
+            return jsonify({'status': 'error', 'error': '用户不存在'}), 403
+        expected_pin = _user_pin(subject)
+        if not expected_pin or not hmac.compare_digest(pin, expected_pin):
+            return jsonify({'status': 'error', 'error': '用户 PIN 无效'}), 401
+        user_token = _user_serializer().dumps({'subject': subject})
+        return jsonify({'status': 'ok', 'data': {
+            'role': 'user', 'subject': subject, 'token': user_token,
+        }})
 
     @bp.get('/overview')
     def overview():
         guard = _guard()
         if guard:
             return guard
+        role = _role()
+        if role == 'user':
+            subject = _user_from_token()
+            try:
+                rows = db_manager.get_attendance_records(limit=10, search=subject)
+            except Exception:
+                rows = []
+            try:
+                bio = store.stats()
+            except Exception:
+                bio = {}
+            return jsonify({'status': 'ok', 'data': _json_safe({
+                'subject': subject,
+                'today_attendance': len(rows),
+                'biometrics': bio,
+                'recent': [_record(r) for r in rows],
+            })})
         try:
             stats = db_manager.get_statistics()
         except Exception:
@@ -182,6 +240,8 @@ def create_mobile_blueprint(config_manager, db_manager, base_dir: str,
         guard = _guard()
         if guard:
             return guard
+        if _role() != 'admin':
+            return jsonify({'status': 'error', 'error': 'forbidden'}), 403
         try:
             items = db_manager.get_all_devices()
             local = db_manager.get_local_device_info()
@@ -222,7 +282,10 @@ def create_mobile_blueprint(config_manager, db_manager, base_dir: str,
         if guard:
             return guard
         payload = request.get_json(silent=True) or request.form
+        role = _role()
         subject = str(payload.get('subject') or '').strip()
+        if role == 'user':
+            subject = _user_from_token()
         modality = str(payload.get('modality') or '').strip()
         note = str(payload.get('note') or '').strip()
         if not subject or not modality:
@@ -271,7 +334,7 @@ def create_mobile_blueprint(config_manager, db_manager, base_dir: str,
             pass
         if allowed and origin and (allowed.strip() == '*' or origin in [o.strip() for o in allowed.split(',')]):
             response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, X-Auth-Token, X-Mobile-Subject'
+            response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, X-Auth-Token'
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, DELETE, OPTIONS'
             response.headers['Vary'] = 'Origin'
         return response

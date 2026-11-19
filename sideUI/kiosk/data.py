@@ -41,7 +41,7 @@ class KioskConfig:
             'camera_index': '0',
             'fullscreen': '1',
             'threshold': '0.40',
-            'liveness_mode': 'degraded',
+            'liveness_mode': 'strict',
             'liveness_threshold': '0.72',
             'cooldown': '3.0',
             'device_id': 'EDGE-KIOSK-01',
@@ -80,6 +80,12 @@ class KioskConfig:
             if not self._parser.has_section(section):
                 return {}
             return dict(self._parser[section])
+
+    def get_encryption_key(self) -> str:
+        with self._lock:
+            if self._parser.has_option('Security', 'encryptionkey'):
+                return self._parser.get('Security', 'encryptionkey')
+            return self._parser.get('Security', 'EncryptionKey', fallback='')
 
     def set(self, section: str, key: str, value: Any) -> None:
         with self._lock:
@@ -204,7 +210,9 @@ class SubjectRepository:
         self.images_dir = self.face_db_path.parent / 'face_images'
         self.images_dir.mkdir(parents=True, exist_ok=True)
         try:
-            self.bio_store = BioTemplateStore(str(DD_DIR / 'biometrics.db'))
+            self.bio_store = BioTemplateStore(
+                str(DD_DIR / 'biometrics.db'), config_manager=self.config
+            )
         except Exception:
             self.bio_store = None
 

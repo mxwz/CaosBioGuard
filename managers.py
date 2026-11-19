@@ -1,6 +1,7 @@
 import os
 import pickle
 import hashlib
+import hmac
 import cv2
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
@@ -344,6 +345,48 @@ class ConfigManager:
         self.config['S3']['region'] = region
         with open(self.config_path, 'w', encoding='utf-8') as f:
             self.config.write(f)
+
+
+def _sync_bearer(cm):
+    return (os.environ.get('CAOS_SYNC_TOKEN')
+            or str((cm.get_section('Security') or {}).get('sync_token') or '')
+            or str(cm.get_web_admin_config().get('token') or ''))
+
+
+def _sync_hmac(cm):
+    return (os.environ.get('CAOS_SYNC_HMAC_SECRET')
+            or str((cm.get_section('Sync') or {}).get('hmac_secret') or '')
+            or str((cm.get_section('Security') or {}).get('sync_hmac_secret') or ''))
+
+
+def send_signed_request(method: str, url: str, cm, **kwargs):
+    headers = dict(kwargs.pop('headers', None) or {})
+    timeout = kwargs.pop('timeout', 15)
+    token = _sync_bearer(cm)
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+    session = requests.Session()
+    request = requests.Request(method, url, headers=headers, **kwargs)
+    prepared = session.prepare_request(request)
+    secret = _sync_hmac(cm)
+    if secret:
+        body = prepared.body
+        if isinstance(body, str):
+            body = body.encode('utf-8')
+        elif body is None:
+            body = b''
+        elif not isinstance(body, bytes):
+            body = bytes(body)
+        timestamp = str(time.time())
+        signature = hmac.new(
+            secret.encode('utf-8'),
+            timestamp.encode('utf-8') + b'.' + body,
+            hashlib.sha256,
+        ).hexdigest()
+        prepared.headers['X-Sync-Timestamp'] = timestamp
+        prepared.headers['X-Sync-Signature'] = signature
+    return session.send(prepared, timeout=timeout)
+
 
 
 def encrypt_embedding(config_manager, embedding):
@@ -2408,11 +2451,14 @@ install_path: ""
                     'device_id': device_id
                 }
                 if embedding is not None:
-                    import base64
-                    import pickle
-                    data['embedding'] = base64.b64encode(pickle.dumps(embedding)).decode('utf-8')
+                    data['embedding'] = base64.b64encode(
+                        np.asarray(embedding, dtype=np.float32).tobytes()
+                    ).decode('utf-8')
                 
-                resp = requests.post(url, files=files, data=data, headers=headers, timeout=30) # Increased timeout for larger upload
+                resp = send_signed_request(
+                    'POST', url, self.config_manager,
+                    files=files, data=data, headers=headers, timeout=30
+                )
                 if resp.status_code == 200:
                     synced_faces.append((name, device_id))
                 elif resp.status_code == 400:
@@ -3168,10 +3214,12 @@ install_path: ""
     def _cloud_reachable(self, timeout=3):
         """连通性检测：轻量探测云端 meta 接口"""
         try:
-            resp = requests.get(
+            resp = send_signed_request(
+                'GET',
                 f"{self._cloud_endpoint()}/api/face/sync/meta",
+                self.config_manager,
                 params={'device_id': getattr(self, 'device_id', None)},
-                timeout=timeout
+                timeout=timeout,
             )
             return resp.status_code == 200
         except Exception:
@@ -3186,14 +3234,18 @@ install_path: ""
             'list_type': list_type,
             'metadata': json.dumps(metadata or {}),
             'device_id': device_id,
-            'embedding': base64.b64encode(pickle.dumps(embedding)).decode('utf-8'),
+            'embedding': base64.b64encode(
+                np.asarray(embedding, dtype=np.float32).tobytes()
+            ).decode('utf-8'),
         }
         files = {}
         if face_image is not None:
             ok, buf = cv2.imencode('.jpg', face_image, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
             if ok:
                 files['file'] = ('face.jpg', buf.tobytes(), 'image/jpeg')
-        resp = requests.post(url, data=data, files=files, timeout=15)
+        resp = send_signed_request(
+            'POST', url, self.config_manager, data=data, files=files, timeout=15
+        )
         if resp.status_code != 200:
             raise RuntimeError(f"云端写入失败 (HTTP {resp.status_code})")
 
@@ -3201,7 +3253,9 @@ install_path: ""
         """乐观直写删除：DELETE /api/face/<name> 到云端"""
         url = f"{self._cloud_endpoint()}/api/face/{name}"
         params = {'device_id': device_id} if device_id else None
-        resp = requests.delete(url, params=params, timeout=15)
+        resp = send_signed_request(
+            'DELETE', url, self.config_manager, params=params, timeout=15
+        )
         if resp.status_code not in (200, 404):
             raise RuntimeError(f"云端删除失败 (HTTP {resp.status_code})")
 
@@ -3264,10 +3318,12 @@ install_path: ""
     def _pull_single_face(self, name, device_id):
         """按需拉取单条人脸并写本地缓存"""
         try:
-            resp = requests.get(
+            resp = send_signed_request(
+                'GET',
                 f"{self._cloud_endpoint()}/api/face/sync/one",
+                self.config_manager,
                 params={'name': name, 'device_id': device_id},
-                timeout=15
+                timeout=15,
             )
             if resp.status_code != 200:
                 logger.warning(f"Pull single face failed for {name}: HTTP {resp.status_code}")
@@ -3284,10 +3340,12 @@ install_path: ""
             return True, "单机模式无需对账"
         device_id = getattr(self, 'device_id', None)
         try:
-            resp = requests.get(
+            resp = send_signed_request(
+                'GET',
                 f"{self._cloud_endpoint()}/api/face/sync/meta",
+                self.config_manager,
                 params={'device_id': device_id},
-                timeout=15
+                timeout=15,
             )
             if resp.status_code != 200:
                 return False, f"获取云端元数据失败 (HTTP {resp.status_code})"
@@ -3483,7 +3541,9 @@ class SyncDatabaseManager(DatabaseManagerBase):
         try:
             url = f"{protocol}://{host}:{port}/api/face/sync/all?device_id={self.device_id}"
             logger.info(f"Syncing faces from {url}...")
-            response = requests.get(url, timeout=60)
+            response = send_signed_request(
+                'GET', url, self.config_manager, timeout=60
+            )
             
             if response.status_code == 200:
                 users = response.json()
@@ -3814,7 +3874,9 @@ class AsyncDatabaseManager(DatabaseManagerBase):
         try:
             url = f"{protocol}://{host}:{port}/api/face/sync/all?device_id={self.device_id}"
             logger.info(f"AsyncManager: Syncing faces from {url}...")
-            response = requests.get(url, timeout=60)
+            response = send_signed_request(
+                'GET', url, self.config_manager, timeout=60
+            )
             
             if response.status_code == 200:
                 users = response.json()

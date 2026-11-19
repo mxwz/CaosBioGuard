@@ -7,8 +7,11 @@
 from __future__ import annotations
 
 import abc
+import logging
 import threading
 from typing import Callable, List, Optional, Sequence, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 class RelayController(abc.ABC):
@@ -88,6 +91,7 @@ class SerialRelay(RelayController):
         self._state = False
         self._timer: Optional[threading.Timer] = None
         self._lock = threading.RLock()
+        self.on_relock_failure: Optional[Callable[['SerialRelay'], None]] = None
 
     @property
     def state(self) -> bool:
@@ -104,11 +108,26 @@ class SerialRelay(RelayController):
     def _send(self, command: bytes) -> None:
         if not command:
             raise ValueError('串口继电器命令为空')
+        last_error: Optional[Exception] = None
         with self._lock:
-            device = self._ensure_serial()
-            device.write(command)
-            if hasattr(device, 'reset_output_buffer'):
-                device.reset_output_buffer()
+            for attempt in range(2):
+                try:
+                    device = self._ensure_serial()
+                    device.write(command)
+                    if hasattr(device, 'reset_output_buffer'):
+                        device.reset_output_buffer()
+                    return
+                except Exception as exc:
+                    last_error = exc
+                    try:
+                        if self._serial is not None:
+                            self._serial.close()
+                    except Exception:
+                        pass
+                    self._serial = None
+                    if attempt == 1:
+                        break
+            raise RuntimeError(f'串口命令发送失败: {last_error}')
 
     def open(self) -> None:
         self._send(self.open_command)
@@ -124,8 +143,16 @@ class SerialRelay(RelayController):
         self._send(self.close_command)
         self._state = False
 
+    def _auto_close(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            logger.exception('门禁自动重锁失败，门可能保持打开')
+            if callable(self.on_relock_failure):
+                self.on_relock_failure(self)
+
     def _schedule_close(self, seconds: float) -> None:
-        timer = threading.Timer(seconds, self.close)
+        timer = threading.Timer(seconds, self._auto_close)
         timer.daemon = True
         self._timer = timer
         timer.start()
@@ -134,6 +161,10 @@ class SerialRelay(RelayController):
         with self._lock:
             if self._timer is not None:
                 self._timer.cancel()
+            try:
+                self._send(self.close_command)
+            except Exception:
+                logger.exception('关闭硬件前发送落锁命令失败')
             if self._serial is not None:
                 self._serial.close()
 

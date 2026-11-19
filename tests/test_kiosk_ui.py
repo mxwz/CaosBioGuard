@@ -42,6 +42,7 @@ class KioskUiTests(unittest.TestCase):
     def test_pages_and_nav(self):
         self.assertEqual(self.win.pages.count(), 5)
         self.assertFalse(self.win.nav._buttons[4].isVisible())
+        self.win._on_unlocked()
         for idx in (1, 2, 3):
             self.win.nav.set_current(idx)
             self.win._switch_page(idx)

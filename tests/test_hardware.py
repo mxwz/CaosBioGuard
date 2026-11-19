@@ -5,7 +5,8 @@ from __future__ import annotations
 import time
 import unittest
 
-from hardware import (HardwareManager, SimulatedRelay, WiegandEncoder, parse_byte_command)
+from hardware import (HardwareManager, SerialRelay, SimulatedRelay, WiegandEncoder,
+                      parse_byte_command)
 
 
 class DictConfig:
@@ -33,6 +34,16 @@ class HardwareTests(unittest.TestCase):
         pulses = WiegandEncoder.encode_26bit(facility=12, card_number=3456)
         self.assertEqual(len(pulses), 26)
         self.assertTrue(all(gap == 100 for _, gap in pulses))
+
+    def test_serial_relock_failure_callback(self):
+        relay = SerialRelay('COM99', 'A0 01', 'A0 02')
+        failures = []
+        relay.on_relock_failure = failures.append
+        def fail_send(command):
+            raise RuntimeError('serial unavailable')
+        relay._send = fail_send
+        relay._auto_close()
+        self.assertEqual(failures, [relay])
 
     def test_hardware_manager_unlock_and_health(self):
         events = []

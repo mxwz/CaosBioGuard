@@ -136,8 +136,8 @@ class AdminPage(QWidget):
         grid.addLayout(row, 0, 1)
 
         self.live_combo = QComboBox()
-        self.live_combo.addItems(['degraded', 'strict', 'off'])
-        self.live_combo.setCurrentText(self.config.get('Kiosk', 'liveness_mode', 'degraded'))
+        self.live_combo.addItems(['strict', 'degraded', 'off'])
+        self.live_combo.setCurrentText(self.config.get('Kiosk', 'liveness_mode', 'strict'))
         grid.addWidget(QLabel('活体检测模式'), 1, 0)
         grid.addWidget(self.live_combo, 1, 1)
 

@@ -29,11 +29,12 @@ logger = logging.getLogger(__name__)
 
 
 class TemplateCipher:
-    """Fernet 加密封装；缺少 cryptography 时退化为带前缀的明文并告警。"""
+    """Fernet 加密封装；默认禁止明文写入，仅允许读取历史明文。"""
 
     PREFIX = b'CAOSBIO1:'
 
-    def __init__(self, key: Optional[bytes] = None):
+    def __init__(self, key: Optional[bytes] = None, allow_plaintext: bool = False):
+        self.allow_plaintext = bool(allow_plaintext)
         self._fernet = None
         self.enabled = False
         try:
@@ -42,12 +43,16 @@ class TemplateCipher:
                 self._fernet = Fernet(key)
                 self.enabled = True
         except Exception as exc:
-            logger.warning(f'模板加密不可用，将以明文存储: {exc}')
+            logger.warning(f'模板加密不可用: {exc}')
+        if not self.enabled and not self.allow_plaintext:
+            raise RuntimeError('模板加密未启用，禁止明文写入生物特征模板')
 
     def encrypt(self, data: bytes) -> bytes:
         if self.enabled and self._fernet is not None:
             return self.PREFIX + self._fernet.encrypt(data)
-        return data
+        if self.allow_plaintext:
+            return data
+        raise RuntimeError('模板加密未启用，拒绝明文写入')
 
     def decrypt(self, data: bytes) -> bytes:
         if self.enabled and self._fernet is not None and data.startswith(self.PREFIX):
@@ -55,7 +60,7 @@ class TemplateCipher:
         return data
 
 
-def _cipher_from_config(config_manager: Any) -> TemplateCipher:
+def _cipher_from_config(config_manager: Any, allow_plaintext: bool = False) -> TemplateCipher:
     key = None
     if config_manager is not None:
         try:
@@ -64,7 +69,7 @@ def _cipher_from_config(config_manager: Any) -> TemplateCipher:
                 key = raw.encode() if isinstance(raw, str) else raw
         except Exception as exc:
             logger.warning(f'读取加密密钥失败: {exc}')
-    return TemplateCipher(key)
+    return TemplateCipher(key, allow_plaintext=allow_plaintext)
 
 
 # ---------------------------------------------------------------------------
@@ -96,10 +101,12 @@ class BioTemplateStore:
     """线程安全的模板库。"""
 
     def __init__(self, db_path: str = './dd/biometrics.db', config_manager: Any = None,
-                 cipher: Optional[TemplateCipher] = None):
+                 cipher: Optional[TemplateCipher] = None, allow_plaintext: bool = False):
         self.db_path = db_path
         self._lock = threading.RLock()
-        self.cipher = cipher or _cipher_from_config(config_manager)
+        self.cipher = cipher or _cipher_from_config(
+            config_manager, allow_plaintext=allow_plaintext
+        )
         os.makedirs(os.path.dirname(os.path.abspath(db_path)) or '.', exist_ok=True)
         self._init_db()
 

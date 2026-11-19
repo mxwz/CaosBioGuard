@@ -128,7 +128,7 @@ class BiometricService:
         try:
             report = engine.liveness(sample)
         except Exception as exc:
-            return True, {'mode': 'error', 'error': str(exc)}
+            return False, {'mode': 'error', 'error': str(exc)}
         return bool(report.passed), report.to_dict()
 
     def match_one(self, modality: str, sample: BioSample, device_id: Optional[str] = None,
@@ -147,6 +147,10 @@ class BiometricService:
                                    details={'liveness': live_detail, 'reason': '活体未通过'})
         try:
             probe = engine.extract(sample)
+            if candidates and getattr(engine, 'policy', '') == 'fusion':
+                backend = candidates[0][1].meta.get('backend')
+                if backend:
+                    probe = replace(probe, meta=dict(probe.meta, backend=backend))
         except Exception as exc:
             return MatchResult(modality, 0.0, threshold or engine.threshold, False,
                                details={'reason': f'特征提取失败: {exc}'})

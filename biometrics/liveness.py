@@ -39,7 +39,7 @@ ARC_REF_112 = np.array([
 
 @dataclass
 class LivenessPolicy:
-    mode: str = 'degraded'            # strict / degraded / off
+    mode: str = 'strict'              # strict / degraded / off
     passive_threshold: float = 0.72
     heuristic_threshold: float = 0.55
     require_active: bool = False
@@ -327,8 +327,8 @@ class FacePadGate:
     """人脸识别前的活体硬门禁。
 
     ``mode``：
-    - ``strict``：无模型/未通过 → 直接拒绝；
-    - ``degraded``（默认）：无模型 → 启发式 + 时间一致性，并在日志中标记降级；
+    - ``strict``（默认）：无模型/未通过 → 直接拒绝；
+    - ``degraded``：无模型 → 启发式 + 时间一致性，并在日志中标记降级；
     - ``off``：只记录不拦截（仅建议在调试环境使用）。
     """
 

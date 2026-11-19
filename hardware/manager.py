@@ -45,7 +45,10 @@ class HardwareManager:
             )
         else:
             relay = SimulatedRelay(get('lock_name', 'door-lock'))
-        return cls(relay, section, event_callback)
+        manager = cls(relay, section, event_callback)
+        if isinstance(relay, SerialRelay):
+            relay.on_relock_failure = lambda _relay: manager.trigger_alarm()
+        return manager
 
     # ------------------------------------------------------------------
     def _emit(self, device: str, event: str, value: Any = None) -> None:

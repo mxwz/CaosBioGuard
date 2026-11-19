@@ -1,9 +1,11 @@
 import sys
 import os
 import logging
+import hmac
 import secrets
 import hashlib
 import time
+from functools import wraps
 from datetime import timedelta
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, session, Response
 from werkzeug.utils import secure_filename
@@ -23,8 +25,23 @@ from agent_tools.mcp import mcp_bp
 from notify import init_notify_center, get_notify_center, Event
 from registry import init_registry_center, get_registry_center
 
+config_manager = ConfigManager()
 app = Flask(__name__)
-app.secret_key = 'supersecretkey'  # Change this in production
+
+
+def _resolve_flask_secret(cm):
+    value = os.environ.get('CAOS_FLASK_SECRET_KEY')
+    if not value:
+        value = str((cm.get_section('Security') or {}).get('flask_secret_key') or '')
+    if value:
+        return value
+    if os.environ.get('FLASK_ENV', 'development').lower() == 'production':
+        raise RuntimeError('生产环境必须设置 CAOS_FLASK_SECRET_KEY 或 [Security] flask_secret_key')
+    logging.getLogger(__name__).warning('未配置 Flask 密钥，开发环境使用临时随机密钥，重启后会话失效')
+    return secrets.token_hex(32)
+
+
+app.secret_key = _resolve_flask_secret(config_manager)
 
 # Initialize managers
 # Ensure we are using absolute paths based on the project root
@@ -34,9 +51,6 @@ DB_PATH = os.path.join(BASE_DIR, "sideUI", "dd", "face_database.pkl")
 SQLITE_PATH = os.path.join(BASE_DIR, "sideUI", "dd", "records.db")
 FACE_IMAGES_DIR = os.path.join(BASE_DIR, "sideUI", "face_images")
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "web_admin", "uploads")
-
-# Use default config (root/config.ini) to ensure consistency with db_manager
-config_manager = ConfigManager()
 
 # 云端→单机模式切换检测：enabled 从 True 变为 False 时，自动反向迁移（MySQL+R2 → 本地 SQLite+目录）
 # 必须在 face_store / db_manager 构造前执行，确保后续用本地后端加载到迁移后的数据
@@ -149,6 +163,59 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _bearer_token() -> str:
+    authorization = request.headers.get('Authorization', '')
+    return authorization[7:].strip() if authorization.startswith('Bearer ') else ''
+
+
+def _expected_token(kind: str) -> str:
+    if kind == 'agent':
+        return (os.environ.get('CAOS_AGENT_TOKEN')
+                or str((config_manager.get_section('Agent') or {}).get('api_token') or '')
+                or str(config_manager.get_web_admin_config().get('token') or ''))
+    return (os.environ.get('CAOS_SYNC_TOKEN')
+            or str((config_manager.get_section('Security') or {}).get('sync_token') or '')
+            or str(config_manager.get_web_admin_config().get('token') or ''))
+
+
+def _sync_hmac_secret() -> str:
+    return (os.environ.get('CAOS_SYNC_HMAC_SECRET')
+            or str((config_manager.get_section('Sync') or {}).get('hmac_secret') or '')
+            or str((config_manager.get_section('Security') or {}).get('sync_hmac_secret') or ''))
+
+
+def _valid_sync_signature() -> bool:
+    secret = _sync_hmac_secret()
+    if not secret:
+        return True
+    timestamp = request.headers.get('X-Sync-Timestamp', '')
+    signature = request.headers.get('X-Sync-Signature', '')
+    if not timestamp or not signature:
+        return False
+    try:
+        if abs(time.time() - float(timestamp)) > 300:
+            return False
+        payload = timestamp.encode('utf-8') + b'.' + request.get_data(cache=True)
+        expected = hmac.new(secret.encode('utf-8'), payload, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature, expected)
+    except (TypeError, ValueError):
+        return False
+
+
+def require_bearer(kind: str = 'sync'):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            expected = _expected_token(kind)
+            if not expected or not _bearer_token() or not hmac.compare_digest(_bearer_token(), expected):
+                return jsonify({'message': 'invalid or missing bearer token'}), 401
+            if kind == 'sync' and not _valid_sync_signature():
+                return jsonify({'message': 'invalid or expired sync signature'}), 401
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
 # Add Database Log Handler
 db_handler = DatabaseLogHandler(db_manager)
 db_handler.setLevel(logging.INFO)
@@ -189,14 +256,63 @@ def apply_cors(response):
     if origin and origin in allowed:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Sync-Timestamp, X-Sync-Signature'
         response.headers['Vary'] = 'Origin'
     return response
 
 # --- Auth Setup ---
 def hash_password(password, salt):
-    """MD5(password + salt)"""
+    """MD5(password + salt)，仅用于兼容旧口令。"""
     return hashlib.md5((password + salt).encode()).hexdigest()
+
+
+def hash_password_pbkdf2(password: str, iterations: int = 200_000) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        'sha256', password.encode('utf-8'), bytes.fromhex(salt), iterations
+    ).hex()
+    return f'pbkdf2_sha256${iterations}${salt}${digest}'
+
+
+def verify_password(password: str, stored: str, legacy_salt: str = '') -> bool:
+    if stored and stored.startswith('pbkdf2_sha256$'):
+        try:
+            _algorithm, iterations, salt, digest = stored.split('$')
+            expected = hashlib.pbkdf2_hmac(
+                'sha256', password.encode('utf-8'),
+                bytes.fromhex(salt), int(iterations),
+            ).hex()
+            return hmac.compare_digest(digest, expected)
+        except (TypeError, ValueError):
+            return False
+    return hmac.compare_digest(hash_password(password, legacy_salt), stored)
+
+
+_LOGIN_ATTEMPTS: dict[str, list] = {}
+
+
+def _login_rate_limited(ip: str) -> bool:
+    record = _LOGIN_ATTEMPTS.get(ip)
+    if not record:
+        return False
+    count, blocked_until = record
+    if blocked_until and time.time() < blocked_until:
+        return True
+    if blocked_until and time.time() >= blocked_until:
+        _LOGIN_ATTEMPTS.pop(ip, None)
+    return False
+
+
+def _record_failed_login(ip: str) -> None:
+    count, blocked_until = _LOGIN_ATTEMPTS.get(ip, (0, 0))
+    count += 1
+    if count >= 5:
+        blocked_until = time.time() + 900
+    _LOGIN_ATTEMPTS[ip] = [count, blocked_until]
+
+
+def _clear_login_attempts(ip: str) -> None:
+    _LOGIN_ATTEMPTS.pop(ip, None)
 
 def setup_auth():
     """Setup Admin Auth"""
@@ -211,9 +327,9 @@ def setup_auth():
     if not token or not salt:
         # Generate new credentials
         plain_password = secrets.token_hex(12) # 24 chars
-        salt = secrets.token_hex(4) # 8 chars
-        hashed_token = hash_password(plain_password, salt)
-        
+        salt = secrets.token_hex(4) # retained for legacy compatibility
+        hashed_token = hash_password_pbkdf2(plain_password)
+
         # Save back to config
         config_manager.set_web_admin_config(
             host=config['host'],
@@ -256,9 +372,12 @@ def check_auth():
     if request.path.startswith('/api/face/') and request.method == 'DELETE':
         return None
 
-    # Agent 工具层端点：由编排层以 token 调用，绕过 session 认证（P2 再加 token 校验）
+    # Agent 工具层端点：独立 Bearer token，不使用浏览器会话
     if request.path.startswith('/api/agent/'):
-        return None
+        expected = _expected_token('agent')
+        if expected and _bearer_token() and hmac.compare_digest(_bearer_token(), expected):
+            return None
+        return jsonify({'message': 'invalid or missing agent token'}), 401
 
     # 多模态 API / 手机端 API：Blueprint 内部用 Bearer token 或 session 双向鉴权
     if request.path.startswith('/api/biometrics/') or request.path.startswith('/api/mobile/'):
@@ -286,15 +405,19 @@ def check_auth():
 def login():
     """Login Page"""
     if request.method == 'POST':
+        ip = request.remote_addr or 'unknown'
+        if _login_rate_limited(ip):
+            flash('登录失败次数过多，请 15 分钟后再试', 'error')
+            return redirect(url_for('login'))
         login_type = request.form.get('login_type')
-        
+
         if login_type == 'password':
-            password = request.form.get('password')
+            password = request.form.get('password') or ''
             stored_hash = app.config.get('ADMIN_TOKEN')
             salt = app.config.get('ADMIN_SALT')
-            
-            # Simple token verification
-            if hash_password(password, salt) == stored_hash:
+
+            if verify_password(password, stored_hash, salt):
+                _clear_login_attempts(ip)
                 session.permanent = True
                 session['logged_in'] = True
                 session['user'] = 'admin'
@@ -306,6 +429,7 @@ def login():
                 
                 return redirect(url_for('index'))
             else:
+                _record_failed_login(ip)
                 # Log failed login
                 db_manager.add_admin_log('unknown', 'login_failed', 'web_admin', 'Password login failed', 'medium')
                 flash('密码错误', 'error')
@@ -357,6 +481,7 @@ def login():
                                     is_web_admin = any(f.get('device_id') == 'admin' for f in user_faces)
                                     
                                     if is_web_admin:
+                                        _clear_login_attempts(ip)
                                         session.permanent = True
                                         session['logged_in'] = True
                                         session['user'] = match_name
@@ -1570,6 +1695,7 @@ def settings():
     return redirect(url_for('settings_general'))
 
 @app.route('/api/sync_config')
+@require_bearer('sync')
 def sync_config():
     """API to sync configuration to clients"""
     try:
@@ -1627,6 +1753,7 @@ def sync_config():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/face/sync/push', methods=['POST'])
+@require_bearer('sync')
 def api_face_sync_push():
     """
     Proxy API to receive face data from client and update server DB.
@@ -1657,11 +1784,14 @@ def api_face_sync_push():
         embedding = None
         if embedding_b64:
             import base64
-            import pickle
             try:
-                embedding = pickle.loads(base64.b64decode(embedding_b64))
+                raw = base64.b64decode(embedding_b64, validate=True)
+                embedding = np.frombuffer(raw, dtype=np.float32)
+                if embedding.size == 0 or embedding.ndim != 1 or not np.isfinite(embedding).all():
+                    raise ValueError('invalid embedding')
             except Exception as e:
                 logger.error(f"Failed to decode embedding: {e}")
+                return jsonify({'message': 'embedding must be base64 encoded float32 vector'}), 400
 
         if file:
             # Read image for face detection
@@ -1740,6 +1870,7 @@ def api_face_sync_push():
         return jsonify({'message': str(e)}), 500
 
 @app.route('/api/face/<name>', methods=['DELETE'])
+@require_bearer('sync')
 def api_face_delete(name):
     """
     Proxy API to receive face deletion from client and update server DB.
@@ -1760,6 +1891,7 @@ def api_face_delete(name):
         return jsonify({'message': str(e)}), 500
 
 @app.route('/api/face/sync/all', methods=['GET'])
+@require_bearer('sync')
 def api_face_sync_all():
     """
     API to provide faces to clients (Pull).
@@ -1830,6 +1962,7 @@ def api_face_sync_all():
         return jsonify({'message': str(e)}), 500
 
 @app.route('/api/face/sync/meta', methods=['GET'])
+@require_bearer('sync')
 def api_face_sync_meta():
     """
     返回人脸元数据清单（不含 embedding / 图片），用于边缘端对账 diff。
@@ -1844,6 +1977,7 @@ def api_face_sync_meta():
         return jsonify({'message': str(e)}), 500
 
 @app.route('/api/face/sync/one', methods=['GET'])
+@require_bearer('sync')
 def api_face_sync_one():
     """
     按需拉取单条人脸（含 embedding 与图片 base64），供边缘端对账差异拉取。

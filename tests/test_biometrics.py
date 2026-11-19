@@ -126,7 +126,7 @@ class TemplateTests(unittest.TestCase):
 class StoreTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix='caosbio_')
-        self.store = BioTemplateStore(os.path.join(self.tmp, 'bio.db'))
+        self.store = BioTemplateStore(os.path.join(self.tmp, 'bio.db'), allow_plaintext=True)
         self.engine = build_biometric_registry().resolve('palmprint')
 
     def tearDown(self):
@@ -165,6 +165,10 @@ class StoreTests(unittest.TestCase):
         self.store.save('李四', t1)
         self.assertFalse(self.store.save('李四', t2))
         self.assertAlmostEqual(self.store.get_entry('李四', 'palmprint').quality, 0.9)
+
+    def test_plaintext_store_rejected_by_default(self):
+        with self.assertRaises(RuntimeError):
+            BioTemplateStore(os.path.join(self.tmp, 'secure.db'))
 
 
 class FusionTests(unittest.TestCase):
@@ -238,7 +242,7 @@ class LivenessTests(unittest.TestCase):
 class ServiceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix='caosbio_svc_')
-        self.store = BioTemplateStore(os.path.join(self.tmp, 'bio.db'))
+        self.store = BioTemplateStore(os.path.join(self.tmp, 'bio.db'), allow_plaintext=True)
         self.service = BiometricService(build_biometric_registry(), self.store)
 
     def tearDown(self):
@@ -252,6 +256,22 @@ class ServiceTests(unittest.TestCase):
                                    require_liveness=False)
         self.assertTrue(v['passed'])
         self.assertEqual(v['match']['subject'], '王五')
+
+    def test_liveness_exception_fails_closed(self):
+        engine = self.service.registry.resolve('palmprint')
+        original = engine.liveness
+        def raise_liveness(sample):
+            raise RuntimeError('PAD unavailable')
+        engine.liveness = raise_liveness
+        try:
+            out = self.service.verify_1n(
+                'palmprint', BioSample.image(synthetic.palmprint_image(1)),
+                require_liveness=True,
+            )
+            self.assertFalse(out['passed'])
+            self.assertEqual(out['match']['details']['reason'], '活体未通过')
+        finally:
+            engine.liveness = original
 
     def test_multi_factor(self):
         self.service.enroll('赵六', 'palmprint', [BioSample.image(synthetic.palmprint_image(1))])

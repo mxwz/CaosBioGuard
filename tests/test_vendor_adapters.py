@@ -128,7 +128,9 @@ class HybridBackendTests(unittest.TestCase):
 class StoreBackendCoexistenceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix='caos_backend_')
-        self.store = BioTemplateStore(os.path.join(self.tmp, 'bio.db'))
+        self.store = BioTemplateStore(
+            os.path.join(self.tmp, 'bio.db'), allow_plaintext=True
+        )
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)

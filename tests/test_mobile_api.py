@@ -18,7 +18,13 @@ class _Config:
         return {'token': 'mobile-token'}
 
     def get_section(self, name):
+        if name == 'UserPins':
+            return {'张三': '1234'}
         return {}
+
+    def get_encryption_key(self):
+        from cryptography.fernet import Fernet
+        return Fernet.generate_key().decode()
 
 
 class _DB:
@@ -35,6 +41,9 @@ class _DB:
                                 end_date=None, search='', device_id=''):
         today = datetime.now().strftime('%Y-%m-%d')
         return [(1, search or '张三', f'{today} 09:01:00', '正常', '', 'edge-1', 'synced', None)]
+
+    def get_all_names(self):
+        return ['张三']
 
 
 class MobileApiTests(unittest.TestCase):
@@ -53,21 +62,30 @@ class MobileApiTests(unittest.TestCase):
         r = self.client.post('/api/mobile/login', json={'token': 'mobile-token'})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get_json()['data']['role'], 'admin')
-        r = self.client.get('/api/mobile/overview')
+        r = self.client.get('/api/mobile/overview',
+                            headers={'Authorization': 'Bearer mobile-token'})
         self.assertEqual(r.status_code, 200)
         d = r.get_json()['data']
         self.assertEqual(d['stats']['user']['total'], 3)
         self.assertEqual(d['today_attendance'], 1)
 
     def test_user_records(self):
-        r = self.client.get('/api/mobile/records', headers={'X-Mobile-Subject': '张三'})
+        r = self.client.post('/api/mobile/login',
+                             json={'subject': '张三', 'pin': '1234'})
+        self.assertEqual(r.status_code, 200)
+        token = r.get_json()['data']['token']
+        r = self.client.get('/api/mobile/records',
+                            headers={'Authorization': f'Bearer {token}'})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(len(r.get_json()['data']), 1)
 
     def test_enroll_request(self):
+        r = self.client.post('/api/mobile/login',
+                             json={'subject': '张三', 'pin': '1234'})
+        token = r.get_json()['data']['token']
         r = self.client.post('/api/mobile/enroll-request',
-                             json={'subject': '张三', 'modality': 'voiceprint'},
-                             headers={'X-Mobile-Subject': '张三'})
+                             json={'modality': 'voiceprint'},
+                             headers={'Authorization': f'Bearer {token}'})
         self.assertEqual(r.status_code, 200)
         r = self.client.get('/api/mobile/enroll-requests',
                             headers={'Authorization': 'Bearer mobile-token'})

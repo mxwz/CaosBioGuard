@@ -23,6 +23,10 @@ class _Config:
     def get_section(self, name):
         return {}
 
+    def get_encryption_key(self):
+        from cryptography.fernet import Fernet
+        return Fernet.generate_key().decode()
+
 
 class BiometricApiTests(unittest.TestCase):
     def setUp(self):

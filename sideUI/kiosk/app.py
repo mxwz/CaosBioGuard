@@ -6,6 +6,9 @@
 from __future__ import annotations
 
 import sys
+import hashlib
+import hmac
+import secrets
 import time
 from datetime import datetime
 from pathlib import Path
@@ -33,13 +36,38 @@ from .pages.records import RecordsPage
 from .workers import CameraWorker, DemoStreamWorker, FaceResult, InferenceWorker, run_task
 
 
+def hash_pin(pin: str, iterations: int = 200_000) -> str:
+    salt = secrets.token_hex(8)
+    digest = hashlib.pbkdf2_hmac(
+        'sha256', pin.encode('utf-8'), bytes.fromhex(salt), iterations
+    ).hex()
+    return f'pbkdf2${iterations}${salt}${digest}'
+
+
+def verify_pin(pin: str, stored: str) -> bool:
+    if not stored.startswith('pbkdf2$'):
+        return hmac.compare_digest(pin, stored)
+    try:
+        _algorithm, iterations, salt, digest = stored.split('$')
+        expected = hashlib.pbkdf2_hmac(
+            'sha256', pin.encode('utf-8'), bytes.fromhex(salt), int(iterations)
+        ).hex()
+        return hmac.compare_digest(digest, expected)
+    except (TypeError, ValueError):
+        return False
+
+
 class AdminLoginOverlay(QWidget):
     unlocked = Signal()
 
     def __init__(self, config: KioskConfig, parent=None):
         super().__init__(parent)
         self.config = config
-        self._first_time = not bool(config.get('Kiosk', 'admin_pin', '').strip())
+        stored_pin = config.get('Kiosk', 'admin_pin', '').strip()
+        self._first_time = not bool(stored_pin)
+        self._legacy_pin = bool(stored_pin and not stored_pin.startswith('pbkdf2$'))
+        self._attempts = 0
+        self._locked_until = 0.0
         self.setAttribute(Qt.WA_StyledBackground, False)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -94,6 +122,9 @@ class AdminLoginOverlay(QWidget):
         self.pin.setFocus()
 
     def _submit(self) -> None:
+        if time.time() < self._locked_until:
+            self.error.setText('失败次数过多，请 30 秒后再试')
+            return
         value = self.pin.text().strip()
         if not value:
             self.error.setText('请输入 PIN')
@@ -102,15 +133,24 @@ class AdminLoginOverlay(QWidget):
             if len(value) < 4:
                 self.error.setText('PIN 至少 4 位')
                 return
-            self.config.set('Kiosk', 'admin_pin', value)
+            self.config.set('Kiosk', 'admin_pin', hash_pin(value))
             self._first_time = False
+            self._legacy_pin = False
             self.hide()
             self.unlocked.emit()
             return
-        if value != self.config.get('Kiosk', 'admin_pin', ''):
+        stored = self.config.get('Kiosk', 'admin_pin', '')
+        if not verify_pin(value, stored):
+            self._attempts += 1
+            if self._attempts >= 5:
+                self._locked_until = time.time() + 30
+                self._attempts = 0
             self.error.setText('PIN 不正确')
             self.pin.clear()
             return
+        if self._legacy_pin:
+            self.config.set('Kiosk', 'admin_pin', hash_pin(value))
+            self._legacy_pin = False
         self.hide()
         self.unlocked.emit()
 
@@ -131,6 +171,7 @@ class KioskWindow(QMainWindow):
         self._inference: Optional[InferenceWorker] = None
         self.hardware: Optional[HardwareManager] = None
         self._admin_unlocked = False
+        self._pending_page = 4
         self._shutting_down = False
         self._last_emit: Dict[str, float] = {}
         self._frame_count = 0
@@ -301,25 +342,27 @@ class KioskWindow(QMainWindow):
 
     # ------------------------------------------------------------------
     def _switch_page(self, index: int) -> None:
-        if index == 4 and not self._admin_unlocked:
-            self._ask_admin()
+        if index in (1, 2, 3, 4) and not self._admin_unlocked:
+            self._ask_admin(index)
             self.nav.set_current(self.pages.currentIndex())
             return
         self.pages.fade_to(index)
 
-    def _ask_admin(self) -> None:
+    def _ask_admin(self, target_page: int = 4) -> None:
+        self._pending_page = target_page
         if self._admin_unlocked:
-            self.nav.set_current(4)
-            self.pages.fade_to(4)
+            self.nav.set_current(target_page)
+            self.pages.fade_to(target_page)
             return
         self.login.open()
 
     def _on_unlocked(self) -> None:
         self._admin_unlocked = True
+        target = self._pending_page
         self.nav._buttons[4].setVisible(True)
         self.lock_btn.setText('管理已解锁')
-        self.nav.set_current(4)
-        self.pages.fade_to(4)
+        self.nav.set_current(target)
+        self.pages.fade_to(target)
         self.admin.refresh()
         self.toast_message('管理员已解锁', 'ok')
 

@@ -160,7 +160,7 @@ class InferenceWorker(QThread):
         self._refresh()
 
     def _build_gate(self) -> FacePadGate:
-        mode = self.config.get('Kiosk', 'liveness_mode', 'degraded')
+        mode = self.config.get('Kiosk', 'liveness_mode', 'strict')
         policy = LivenessPolicy(mode=mode,
                                 passive_threshold=self.config.get_float('Kiosk', 'liveness_threshold', 0.72),
                                 consecutive=2, ema_alpha=0.55)
