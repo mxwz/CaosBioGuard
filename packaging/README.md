@@ -27,8 +27,10 @@
 安装 Inno Setup 后执行：
 
 ```powershell
-ISCC packaging/windows_installer.iss
+.\packaging\build_installer.ps1
 ```
+
+脚本会自动查找 PATH、当前用户安装目录和 Program Files 中的 `ISCC.exe`。
 
 产物：`dist/installer/CaosBioGuardKioskSetup.exe`
 
@@ -47,7 +49,7 @@ sudo apt install -y libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0
 
 ## Android APK
 
-PySide6 与 PyInstaller 不能直接生成 APK。当前手机端是 PWA 和微信小程序；若要 APK，推荐用 Capacitor 包装现有 `mobile/`，并安装 JDK、Android Studio 和 Android SDK。详细流程见 `docs/run-modes.md`。
+PySide6 与 PyInstaller 不能直接生成 APK。当前手机端是 PWA 和微信小程序；若要 APK，推荐用 Capacitor 包装现有 `mobile/`，并安装 JDK、Android Studio 和 Android SDK。Kivy/BeeWare 也可生成 APK，但都需要重写 UI，且视觉原生依赖适配成本更高。详细流程见 `docs/run-modes.md`。
 
 ## 注意
 

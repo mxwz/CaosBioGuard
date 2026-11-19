@@ -147,7 +147,7 @@ python -m web_admin.app
 Inno Setup 安装包：
 
 ```powershell
-ISCC packaging/windows_installer.iss
+.\packaging\build_installer.ps1
 ```
 
 容器部署：

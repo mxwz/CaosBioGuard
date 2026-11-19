@@ -5,7 +5,8 @@
 #define AppName "Caos BioGuard Kiosk"
 #define AppVersion "0.2.0"
 #define AppPublisher "Caos BioGuard"
-#define BuildDir "dist\CaosBioGuardKiosk"
+#define BuildDir SourcePath + "\..\dist\CaosBioGuardKiosk"
+#define OutputDir SourcePath + "\..\dist\installer"
 
 [Setup]
 AppId={{CAOSBIOGUARD-KIOSK-EDGE-001}
@@ -14,7 +15,7 @@ AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\CaosBioGuardKiosk
 DefaultGroupName={#AppName}
-OutputDir=dist\installer
+OutputDir={#OutputDir}
 OutputBaseFilename=CaosBioGuardKioskSetup
 Compression=lzma2/max
 SolidCompression=yes
@@ -27,8 +28,7 @@ UninstallDisplayIcon={app}\CaosBioGuardKiosk.exe
 SetupLogging=yes
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Default.isl"
-Name: "english"; MessagesFile: "compiler:Languages\English.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面图标"; GroupDescription: "附加图标:"; Flags: checkedonce

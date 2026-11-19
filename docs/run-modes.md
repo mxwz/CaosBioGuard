@@ -244,7 +244,13 @@ dist/CaosBioGuardKiosk/CaosBioGuardKiosk.exe
 
 ### 5.2 Inno Setup 安装包
 
-先安装 Inno Setup，然后执行：
+推荐使用自动查找编译器的脚本：
+
+```powershell
+.\packaging\build_installer.ps1
+```
+
+如果 Inno Setup 已加入 PATH，也可以直接执行：
 
 ```powershell
 ISCC packaging/windows_installer.iss
@@ -262,14 +268,35 @@ dist/installer/CaosBioGuardKioskSetup.exe
 
 当前项目的边缘端是 PySide6，PyInstaller 不能直接生成 APK。手机端当前形态是 PWA 和微信小程序。
 
-若需要原生 APK，推荐低成本路线：
+若需要原生 APK，推荐低成本路线：Capacitor 包装现有 `mobile/` Web/PWA。
 
-1. 基于现有 `mobile/` Web/PWA；
-2. 使用 Capacitor 包装；
-3. 安装 Android Studio、JDK 和 Android SDK；
-4. 执行 `npx cap add android`、`npx cap sync`、`./gradlew assembleDebug`。
+条件：
 
-当前环境未安装 JDK/Android SDK，因此尚未生成 APK。另一条路线是 Qt for Android 或 Flutter/React Native 重写，成本明显更高。
+- Node.js/npm；
+- JDK 17；
+- Android Studio；
+- Android SDK Platform、Build-Tools、Platform-Tools；
+- 原生壳中配置 API Base URL，公网必须 HTTPS；
+- 正式发布需要签名 keystore，调试包可直接生成 debug APK。
+
+典型命令：
+
+```powershell
+npm install
+npx cap add android
+npx cap sync
+cd android
+.\gradlew assembleDebug
+```
+
+调试 APK 路径通常为 `android/app/build/outputs/apk/debug/app-debug.apk`。
+
+### Kivy / BeeWare 是否可行
+
+- Kivy 可以通过 Buildozer/python-for-android 生成 APK，但当前 PySide6 界面不能复用，需要重写为 Kivy UI；OpenCV、ONNX Runtime、摄像头、ARM 原生依赖和权限适配也较复杂。
+- BeeWare/Briefcase/Toga 同样可以做 Android 应用，但也需要把 PySide6 界面重写为 Toga；摄像头、门禁硬件和视觉推理生态不如原生/Kotlin 成熟。
+- PySide6 QWidget 不能直接作为常规 Android APK 运行；Qt 官方 Android 路线更适合 QML/Qt Quick 或 C++，不是现有 QWidget 代码直接打包。
+- 本项目推荐：手机管理端用 Capacitor，边缘端继续用 PySide6；若手机端必须本地跑视觉模型，再考虑 Kotlin + ONNX Runtime Android 的原生方案。
 
 ## 7. 启动后检查
 
