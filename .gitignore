@@ -20,6 +20,15 @@ dist/
 *.spec.bak
 *.log
 
+# ===== Capacitor / Android =====
+mobile/capacitor/node_modules/
+mobile/capacitor/android/.gradle/
+mobile/capacitor/android/build/
+mobile/capacitor/android/app/build/
+mobile/capacitor/android/capacitor-android/build/
+mobile/capacitor/android/capacitor-cordova-android-plugins/build/
+mobile/capacitor/android/local.properties
+
 # ===== 本地配置 / 隐私 =====
 config.ini
 config.local.ini
