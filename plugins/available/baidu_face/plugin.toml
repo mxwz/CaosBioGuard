@@ -1,0 +1,12 @@
+schema_version = "1.0"
+plugin_id = "baidu.face.windows"
+name = "百度人脸离线识别 SDK"
+version = "8.4.1"
+vendor = "baidu"
+modalities = ["face"]
+platforms = ["windows-x64"]
+adapter_class = "adapter.Plugin"
+capabilities = ["detect", "quality", "extract", "compare", "identify", "liveness.rgb", "user_manage"]
+permissions = ["camera", "files.plugin", "files.models"]
+min_app_version = "0.2.2"
+enabled_by_default = false

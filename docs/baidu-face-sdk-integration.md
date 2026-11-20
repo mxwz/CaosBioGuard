@@ -1,145 +1,101 @@
-# 百度人脸离线 SDK 接入评估
+# 百度人脸离线 SDK 接入说明
 
-本文基于百度人脸离线识别 SDK 文档和本地 `baidu_face_SDK/` 压缩包，评估其接入现有 HybridEngine 的方式、授权条件、风险和后续实施步骤。
-
-## 1. SDK 能力
-
-百度官方文档说明，人脸离线识别 SDK 包含人脸采集、活体检测、人脸对比/识别、人脸库管理等能力，全部在本地离线运行。官方文档地址：
+本文记录百度人脸离线识别 SDK 在 CaosBioGuard 中的 Windows 桥接方案、当前实现状态和授权验收边界。官方文档地址：
 
 https://ai.baidu.com/ai-doc/FACE/Yk37c1opz
 
-文档中列出的能力包括：
+## 1. SDK 能力
 
-- 人脸检测与跟踪
-- 人脸质量控制
-- 人脸采集
-- RGB 可见光静默活体
-- NIR 近红外活体
-- Depth/3D 结构光活体
-- 1:1 人脸对比
-- 1:N 人脸搜索
-- 本地人脸库管理
-- 人脸属性、遮挡、模糊、姿态、口罩等检测
+百度 Windows C++ SDK 提供人脸检测、跟踪、特征提取、RGB/NIR/深度活体、1:1 比较、1:N 搜索、本地人脸库和用户组管理等能力，核心类为 `BaiduFaceApi`。
 
-## 2. 本地 SDK 包情况
+本地 Windows C++ SDK 已解压到：
 
-本地目录包含 Android、Windows、Linux ARM、RV1109、RV1106、RV1126、RK3588 等多个版本。
+```text
+baidu_face_SDK/extracted/Windows_Cpp_8.4/FaceOfflineSdk
+```
 
-典型 Windows C++ SDK 头文件 `baidu_face_api.h` 提供 `BaiduFaceApi` 类，关键方法包括：
+关键目录：
 
-- `sdk_init`
-- `get_device_id`
-- `is_auth`
-- `detect`
-- `track`
-- `face_feature`
-- `liveness_feature`
-- `rgb_liveness`
-- `nir_liveness`
-- `rgb_depth_liveness`
-- `match`
-- `compare_feature`
-- `identify`
-- `user_add`
-- `user_update`
-- `user_delete`
+- 头文件：`FaceOfflineSdk/include/baidu_face_api.h`、`struct_info.h`；
+- face_scene 头文件：`face_scene/include`；
+- OpenCV 头文件：`third_party/opencv-win/include`；
+- x64 导入库：`FaceOfflineSdk/lib/x64/BaiduFaceApi.lib`；
+- x64 运行 DLL：`x64/`；
+- 模型目录：`models/`；
+- License 目录：`license/`。
 
-## 3. 关键工程结论
+## 2. C ABI 桥接
 
-Python 不能直接通过 `ctypes` 调用 C++ 类成员函数。C++ 类存在名称修饰、对象构造、this 指针和 ABI 差异，直接调用容易崩溃，也不稳定。
+Python `ctypes` 不适合直接调用 C++ 类成员函数，因此项目在 `vendor_wrappers/baidu_face` 提供稳定 C ABI：
 
-因此需要以下任一桥接方式：
+- `caos_bdface_create` / `caos_bdface_destroy`；
+- `caos_bdface_init` / `caos_bdface_is_authorized`；
+- `caos_bdface_detect`；
+- `caos_bdface_extract`；
+- `caos_bdface_compare`；
+- `caos_bdface_rgb_liveness`。
 
-### 方案 A：C ABI 包装 DLL/so，推荐
+包装层将 Python 传入的 uint8 图像转换为 OpenCV `cv::Mat`，再调用 `BaiduFaceApi`。所有入口均捕获 C++ 异常，避免异常跨越 ABI 边界导致进程崩溃。
 
-编写一个很薄的 C 接口，对 `BaiduFaceApi` 进行包装，例如：
+当前 Windows 构建已通过：
 
-- `caos_bdface_init`
-- `caos_bdface_device_id`
-- `caos_bdface_detect`
-- `caos_bdface_extract`
-- `caos_bdface_liveness`
-- `caos_bdface_compare`
-- `caos_bdface_identify`
-- `caos_bdface_shutdown`
+```powershell
+.\vendor_wrappers\baidu_face\build.ps1
+```
 
-Python 侧通过 `ctypes.CDLL` 加载，再实现 `BaiduFaceSDKAdapter(VendorAdapter)`。
+产物为：
 
-优点：
+```text
+vendor_wrappers/build/baidu_face/Release/caos_bdface.dll
+```
 
-- 稳定、性能好；
-- 可同时适配 Windows DLL 和 Linux so；
-- 与现有 `HybridEngine` 最匹配；
-- 内存和线程可以在桥接层显式管理。
+## 3. Python 适配器
 
-### 方案 B：C#/Java 本地 HTTP 或 gRPC 服务
+`biometrics/adapters/baidu_face.py` 提供 `BaiduFaceSDKAdapter`：
 
-使用官方 C# 或 Java Demo 启动本地服务，对 Python 暴露 localhost HTTP/gRPC。
+- 使用 `ctypes.CDLL` 加载 C ABI；
+- 通过 `os.add_dll_directory` 加载百度运行时 DLL；
+- 初始化模型目录并检查授权；
+- 将百度 `Feature` 转换为标准 `BioTemplate`；
+- 支持 SDK 同源特征比较；
+- 支持 RGB 静默活体结果；
+- 已接入 `VendorAdapterRegistry`，当厂商为 `baidu` 时自动选择该适配器。
 
-优点：
+示例插件入口位于 `plugins/available/baidu_face/`，可通过插件注册中心安装并加载。
 
-- 复用官方示例；
-- 不需要先写 C ABI。
+## 4. 当前授权状态
 
-缺点：
+当前设备尚未完成正式 License 激活。官方 Demo 与适配器检查均返回授权相关错误，因此不能声称已完成真机离线识别验收。
 
-- 多一个运行进程；
-- 部署和运维更复杂；
-- 性能和端口管理成本更高。
+后续激活时需要核对：
 
-### 方案 C：Android/ARM 设备端原生服务
+- 设备硬件指纹；
+- License Key 和 license.ini；
+- 授权有效期；
+- 模型目录；
+- 系统时间；
+- x64 运行时 DLL 依赖；
+- 硬件变更后的授权状态。
 
-Android、RK3588、RV1126 等版本可在设备原生侧运行 SDK，再通过本地 HTTP、gRPC、WebSocket 或命名管道与 Python 边缘服务通信。
+## 5. 与双后端架构的关系
 
-该方案适合最终硬件一体机，不适合当前 Windows 开发阶段。
+百度 SDK 作为人脸模态的厂商后端接入：
 
-## 4. 授权与激活
-
-百度离线 SDK 按设备授权，每台设备需要独立序列号和 License。激活时绑定设备硬件指纹。
-
-需要管理：
-
-- 序列号
-- 硬件指纹
-- License 文件
-- SDK 版本
-- 模型路径
-- 授权有效期
-- 设备系统时间
-
-正式授权永久有效，但硬件变更可能导致授权失效；测试授权通常有有效期限制。
-
-## 5. 与现有双后端架构的关系
-
-现有架构包含：
-
-- `VendorAdapter`
-- `GenericSDKAdapter`
-- `HybridEngine`
-- `BioTemplateStore`
-- `CaptureRepository`
-
-百度 SDK 应作为人脸模态的一个厂商后端接入：
-
-- `model`：继续使用当前 InsightFace 模型；
+- `model`：使用现有本地模型；
 - `sdk`：使用百度离线 SDK；
-- `fusion`：模型和 SDK 分别出分，再按策略融合；
-- `auto`：SDK 可用时优先 SDK，不可用时按配置决定是否回退模型。
+- `fusion`：模型和 SDK 分别出分后融合；
+- `auto`：SDK 可用时优先 SDK，不可用时按配置回退。
 
-注意：不同来源的模板必须同源比较。SDK 模板不能直接与 InsightFace 模板当作同一向量比较，应通过各自后端比较，融合层只融合分数。
+不同来源的特征向量不能直接跨后端比较。SDK 模板必须通过百度 SDK 比较，融合层只融合各自返回的分数。
 
-## 6. 后续实施步骤
+## 6. 剩余验收
 
-1. 解压 Windows C++ SDK，确认 DLL、模型、License 目录和运行时依赖。
-2. 编写 C ABI 包装层，先实现初始化、授权检查、设备指纹和人脸检测。
-3. 再实现特征提取、RGB 活体、1:1 比较和 1:N 搜索。
-4. Python 侧实现 `BaiduFaceSDKAdapter`。
-5. 接入 `VendorAdapterRegistry` 和配置段。
-6. 增加单元测试、桥接层 mock 测试和异常路径测试。
-7. 在真实设备上激活 License，验证离线运行。
-8. 与当前 InsightFace 做 A/B 对比和 fusion 策略验证。
-9. 再扩展 Linux ARM、RK3588 或 Android 一体机版本。
+授权完成后需要执行：
 
-## 7. 当前边界
-
-在没有解压并构建 C ABI 桥接层、没有激活 License 的情况下，不能声称百度离线 SDK 已完成真机接入。当前可确认的是：SDK 包已具备，官方能力和接入路径明确，后续可按适配器方式纳入现有双后端架构。
+1. 真机离线初始化和 License 有效性检查；
+2. 现场人脸检测、特征提取、1:1 和 1:N 测试；
+3. RGB 活体与照片、屏幕、面具等 PAD 攻击测试；
+4. FAR、FRR、EER 和阈值标定；
+5. 与本地模型的 A/B 对比和 fusion 策略验证；
+6. 插件停用、回退、卸载和审计验证；
+7. 单独同意、PIA 和管理员确认流程复核。

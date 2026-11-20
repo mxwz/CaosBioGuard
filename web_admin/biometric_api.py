@@ -23,8 +23,10 @@ import numpy as np
 from flask import Blueprint, Response, jsonify, request, session
 
 from biometrics import (BioSample, BioTemplateStore, BiometricService,
-                        CaptureRepository, ConsentRepository,
+                        CaptureRepository, ConsentRepository, PluginManager,
                         build_biometric_registry)
+from biometrics.plugins import safe_extract_zip
+from biometrics.plugins.template_import import import_template_package
 from biometrics.engines.audio_utils import read_wav
 
 FACE_MODALITIES = {'face'}
@@ -38,6 +40,15 @@ def create_biometric_blueprint(config_manager, base_dir: str, url_prefix: str = 
         str(base / 'dd' / 'capture_versions.db'), config_manager=config_manager
     )
     consent_repo = ConsentRepository(str(base / 'dd' / 'consent_records.db'))
+    allow_unsigned = os.environ.get('CAOS_ALLOW_UNSIGNED_PLUGINS', 'false').lower() in {
+        '1', 'true', 'yes', 'on'
+    }
+    plugin_manager = PluginManager(
+        plugin_root=base / 'plugins' / 'installed',
+        registry_db=base / 'dd' / 'plugin_registry.db',
+        trusted_key_dir=base / 'plugins' / 'trusted_keys',
+        allow_unsigned=allow_unsigned,
+    )
     registry = build_biometric_registry(config_manager=config_manager)
     service = BiometricService(registry, store, config_manager=config_manager)
 
@@ -339,6 +350,84 @@ def create_biometric_blueprint(config_manager, base_dir: str, url_prefix: str = 
     @bp.post('/consent/withdraw')
     def consent_withdraw():
         return _write_consent(True)
+
+    @bp.get('/plugins')
+    def plugins():
+        guard = _guard()
+        if guard:
+            return guard
+        return jsonify({'status': 'ok', 'data': [
+            item.to_dict() for item in plugin_manager.list_plugins()
+        ]})
+
+    @bp.post('/plugins/install')
+    def install_plugin():
+        guard = _guard()
+        if guard:
+            return guard
+        upload = request.files.get('plugin')
+        if upload is None or not upload.filename:
+            return _err('plugin 压缩包必填')
+        import shutil
+        tmp, plugin_root = safe_extract_zip(upload.read(), 'plugin.toml')
+        try:
+            item = plugin_manager.install(plugin_root)
+        except Exception as exc:
+            return _err(str(exc), 400)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        return jsonify({'status': 'ok', 'data': item.to_dict()})
+
+    def _set_plugin_state(enabled: bool):
+        guard = _guard()
+        if guard:
+            return guard
+        payload = _payload()
+        plugin_id = str(payload.get('plugin_id') or '').strip()
+        if not plugin_id:
+            return _err('plugin_id 必填')
+        try:
+            item = plugin_manager.set_enabled(plugin_id, enabled)
+        except Exception as exc:
+            return _err(str(exc), 400)
+        return jsonify({'status': 'ok', 'data': item.to_dict()})
+
+    @bp.post('/plugins/enable')
+    def enable_plugin():
+        return _set_plugin_state(True)
+
+    @bp.post('/plugins/disable')
+    def disable_plugin():
+        return _set_plugin_state(False)
+
+    @bp.get('/plugins/health')
+    def plugin_health():
+        guard = _guard()
+        if guard:
+            return guard
+        plugin_id = str(request.args.get('plugin_id') or '').strip()
+        if not plugin_id:
+            return _err('plugin_id 必填')
+        ok, reason = plugin_manager.health_check(plugin_id)
+        return jsonify({'status': 'ok', 'data': {'ok': ok, 'message': reason}})
+
+    @bp.post('/templates/import')
+    def import_standard_template():
+        guard = _guard()
+        if guard:
+            return guard
+        upload = request.files.get('template')
+        if upload is None or not upload.filename:
+            return _err('template 压缩包必填')
+        import shutil
+        tmp, template_root = safe_extract_zip(upload.read(), 'template.toml')
+        try:
+            result = import_template_package(template_root, store, capture_repo)
+        except Exception as exc:
+            return _err(str(exc), 400)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        return jsonify({'status': 'ok', 'data': result.to_dict()})
 
     @bp.delete('/subjects/<path:subject>')
     def delete_subject(subject: str):

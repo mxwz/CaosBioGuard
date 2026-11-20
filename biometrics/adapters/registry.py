@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from .baidu_face import BaiduFaceSDKAdapter
 from .base import VendorAdapter
 from .generic import GenericSDKAdapter
 
@@ -36,7 +37,10 @@ class VendorAdapterRegistry:
             if str(section.get('enabled', 'false')).lower() not in {'1', 'true', 'yes', 'on'}:
                 continue
             vendor = str(section.get('vendor', 'generic'))
-            adapters[modality] = GenericSDKAdapter(modality, vendor, section)
+            if vendor == 'baidu' and modality == 'face':
+                adapters[modality] = BaiduFaceSDKAdapter(modality, vendor, section)
+            else:
+                adapters[modality] = GenericSDKAdapter(modality, vendor, section)
         return cls(adapters, default_policy, allow_fallback, modality_policies)
 
     def get(self, modality: str) -> Optional[VendorAdapter]:

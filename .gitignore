@@ -33,6 +33,8 @@ web_admin/.env
 face_images/
 picture/
 dd/
+plugins/installed/
+plugins/trusted_keys/
 sideUI/dd/
 
 # ===== IDE / OS =====
@@ -49,6 +51,7 @@ docs/*
 !docs/hardware-design.md
 !docs/application-guide.md
 !docs/vendor-sdk-backends.md
+!docs/plugin-sdk.md
 !docs/run-modes.md
 !docs/environment-setup.md
 !docs/capture-versioning.md

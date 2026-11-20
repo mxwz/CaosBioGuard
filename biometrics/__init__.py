@@ -12,13 +12,15 @@
 设计文档见 ``docs/biometrics-api.md`` 与 ``docs/hardware-design.md``。
 """
 
-from .adapters import GenericSDKAdapter, HybridEngine, VendorAdapter, VendorAdapterRegistry, normalize_template
+from .adapters import (BaiduFaceSDKAdapter, GenericSDKAdapter, HybridEngine,
+                       VendorAdapter, VendorAdapterRegistry, normalize_template)
 from .base import ImageEngine, ModalityEngine, ScoreCalibrator, TemplateGallery, cosine_score, l2norm
 from .fusion import FusionPolicy, FusionResult, evaluate_thresholds, fuse
 from .liveness import (ActiveChallenge, FaceLivenessDetector, FacePadGate, LivenessPolicy,
                        TemporalGuard, crop_face, liveness_compatibility)
 from .capture_store import CaptureRepository, CaptureVersion
 from .consent import ConsentRecord, ConsentRepository
+from .plugins import PluginManager, PluginManifest, import_template_package
 from .registry import BiometricRegistry, build_biometric_registry
 from .service import BiometricService, EnrollResult
 from .store import BioTemplateStore, StoredTemplate, TemplateCipher
@@ -28,13 +30,15 @@ from .types import (BioSample, BioTemplate, LivenessReport, MatchResult, Modalit
 __all__ = [
     'BioSample', 'BioTemplate', 'QualityReport', 'MatchResult', 'LivenessReport', 'ModalitySpec',
     'ModalityEngine', 'ImageEngine', 'TemplateGallery', 'ScoreCalibrator',
-    'VendorAdapter', 'GenericSDKAdapter', 'VendorAdapterRegistry', 'HybridEngine',
+    'VendorAdapter', 'BaiduFaceSDKAdapter', 'GenericSDKAdapter',
+    'VendorAdapterRegistry', 'HybridEngine',
     'normalize_template',
     'BiometricRegistry', 'build_biometric_registry',
     'BiometricService', 'EnrollResult',
     'BioTemplateStore', 'StoredTemplate', 'TemplateCipher',
     'CaptureRepository', 'CaptureVersion',
     'ConsentRecord', 'ConsentRepository',
+    'PluginManager', 'PluginManifest', 'import_template_package',
     'FusionPolicy', 'FusionResult', 'fuse', 'evaluate_thresholds',
     'LivenessPolicy', 'FaceLivenessDetector', 'FacePadGate', 'TemporalGuard',
     'ActiveChallenge', 'crop_face', 'liveness_compatibility',

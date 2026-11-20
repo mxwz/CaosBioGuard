@@ -7,6 +7,7 @@ import os
 import shutil
 import tempfile
 import unittest
+import zipfile
 
 import cv2
 import numpy as np
@@ -32,6 +33,7 @@ class BiometricApiTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix='caos_api_')
         os.makedirs(os.path.join(self.tmp, 'dd'), exist_ok=True)
+        os.environ['CAOS_ALLOW_UNSIGNED_PLUGINS'] = 'true'
         self.app = Flask(__name__)
         self.app.secret_key = 'test'
         self.app.register_blueprint(create_biometric_blueprint(_Config(), self.tmp))
@@ -41,6 +43,7 @@ class BiometricApiTests(unittest.TestCase):
             sess['user'] = 'admin'
 
     def tearDown(self):
+        os.environ.pop('CAOS_ALLOW_UNSIGNED_PLUGINS', None)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _png(self, seed=0):
@@ -116,6 +119,70 @@ class BiometricApiTests(unittest.TestCase):
         r = self.client.post('/api/biometrics/consent/withdraw', json=payload)
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get_json()['data']['status'], 'withdrawn')
+    def test_plugin_install_and_enable_api(self):
+        plugin_toml = '''
+schema_version = "1.0"
+plugin_id = "caos.demo.face"
+name = "演示人脸插件"
+version = "1.0.0"
+vendor = "demo"
+modalities = ["face"]
+platforms = ["windows-x64"]
+adapter_class = "adapter.DemoAdapter"
+capabilities = ["detect", "extract"]
+permissions = ["camera"]
+'''
+        adapter_py = '''
+from biometrics.adapters import VendorAdapter
+class DemoAdapter(VendorAdapter):
+    def __init__(self, config):
+        super().__init__("face", "demo", config)
+    def check_available(self):
+        return True, "ok"
+    def extract(self, sample):
+        raise RuntimeError("test")
+'''
+        fh = io.BytesIO()
+        with zipfile.ZipFile(fh, 'w') as zf:
+            zf.writestr('plugin.toml', plugin_toml)
+            zf.writestr('adapter.py', adapter_py)
+        r = self.client.post(
+            '/api/biometrics/plugins/install',
+            data={'plugin': (io.BytesIO(fh.getvalue()), 'plugin.zip')},
+            content_type='multipart/form-data',
+        )
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        r = self.client.post('/api/biometrics/plugins/enable',
+                             json={'plugin_id': 'caos.demo.face'})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        self.assertTrue(r.get_json()['data']['enabled'])
+
+    def test_template_import_api(self):
+        npy = io.BytesIO()
+        np.save(npy, np.ones(6, dtype=np.float32))
+        template_toml = '''
+subject = "导入测试"
+modality = "iris"
+device_id = "WEB"
+backend = "sdk"
+quality = 0.81
+raw_file = "raw/sample.jpg"
+raw_mime = "image/jpeg"
+[arrays.embedding]
+file = "arrays/embedding.npy"
+'''
+        fh = io.BytesIO()
+        with zipfile.ZipFile(fh, 'w') as zf:
+            zf.writestr('template.toml', template_toml)
+            zf.writestr('arrays/embedding.npy', npy.getvalue())
+            zf.writestr('raw/sample.jpg', b'iris-raw')
+        r = self.client.post(
+            '/api/biometrics/templates/import',
+            data={'template': (io.BytesIO(fh.getvalue()), 'template.zip')},
+            content_type='multipart/form-data',
+        )
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        self.assertTrue(r.get_json()['data']['raw_saved'])
 
 
 if __name__ == '__main__':
