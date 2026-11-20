@@ -122,7 +122,7 @@ unlock_duration=3
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements-edge.txt
+pip install -r requirements/requirements-edge.txt
 python -m pytest -q
 python -m sideUI.kiosk.app
 ```
@@ -130,7 +130,7 @@ python -m sideUI.kiosk.app
 Web 服务：
 
 ```powershell
-pip install -r requirements-web.txt
+pip install -r requirements/requirements-web.txt
 python -m web_admin.app
 ```
 

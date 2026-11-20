@@ -58,3 +58,7 @@ docs/*
 !docs/consent-and-pia.md
 !docs/baidu-face-sdk-integration.md
 !docs/hardware-apk-deployment.md
+!docs/release-guide.md
+!docs/git-notes.md
+!docs/x2000-protocol-dump.txt
+!docs/CaosBioGuard-评估审查报告.html

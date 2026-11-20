@@ -12,8 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-web.txt .
-RUN pip install --no-cache-dir -r requirements-web.txt
+COPY requirements/requirements-web.txt requirements/requirements-web.txt
+RUN pip install --no-cache-dir -r requirements/requirements-web.txt
 
 COPY . .
 RUN mkdir -p sideUI/dd sideUI/face_images web_admin/uploads

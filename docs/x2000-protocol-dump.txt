@@ -1,0 +1,1447 @@
+==== PAGE 0 ====
+X2000人脸识别模组通信协议
+版本V1.0
+
+==== PAGE 1 ====
+1
+前言及声明
+本用户手册针对软、硬件应用开发工程师编写，包含硬件接口、系统资源、指令系统、安装信息等内
+容。为了确保应用开发顺利进行，在进行模组开发前请仔细阅读本手册。
+请妥善保存手册，以便遇到问题时即时查阅。
+我们已尽最大努力以保证本手册的准确性。然而，如您有任何疑问或发现任何错误，可直接与我公司
+或我公司授权代理商联系，我们将十分感激。
+因我公司奉行不断完善改进产品的宗旨，模组和手册内容都有可能改变，恕不另行通知。
+本文件包含的私有信息，在没有本公司书面许可的情况下，第三方不得使用或随意泄露；当然，任何
+在没有授权、特殊条件、限制或告知的情况下对此信息的复制和擅自修改都是侵权行为。
+在对本公司产品的使用中，易胜不背负任何责任或义务；而第三方在使用中则不得侵害任何专利或其
+它知识产权。
+所有产品的售出都受制于本公司在订购承认书里的销售条款和条件。本公司利用测试、工具、质量控
+制等技术手段来支持产品的相关性能符合所需规格的一定程度的保证。除了明确的政府书面要求外，没必
+要执行每款产品的所有参数测试。
+西图之光智能科技有限公司2008－2030©版权。版权所有，侵权必究。
+联系我们
+网址：https://www.xitu3d.com/
+地址：陕西省西咸新区沣西新城西部云谷二期4A 栋10207 室
+电话：15914032836
+
+==== PAGE 2 ====
+https://www.xitu3d.com/
+2
+更新记录
+版本
+日期
+修订人
+修订内容
+V1.0
+2025/3/15
+
+==== PAGE 3 ====
+https://www.xitu3d.com/
+3
+目录
+前言及声明..........................................................................................................................................................1
+更新记录.............................................................................................................................................................. 2
+目录......................................................................................................................................................................3
+通讯协议..............................................................................................................................................................4
+1 串口配置....................................................................................................................................................... 4
+2 通信消息格式............................................................................................................................................... 4
+3 通信消息说明............................................................................................................................................... 5
+4 模块消息的发送和接收............................................................................................................................... 5
+4.1 消息接收(H>>M)....................................................................................................................................5
+4.2 消息发送(M>>H)....................................................................................................................................6
+5 主控接收消息流程.....................................................................................................................................11
+6 一般消息处理流程.....................................................................................................................................12
+7 上下电流程.................................................................................................................................................12
+8 录入流程..................................................................................................................................................... 13
+9 录入说明..................................................................................................................................................... 14
+10 单帧录入................................................................................................................................................... 15
+11 解锁流程................................................................................................................................................... 15
+12 解锁流程说明...........................................................................................................................................16
+13 加密通信流程...........................................................................................................................................16
+14 OTA 升级流程........................................................................................................................................... 17
+15 补充说明................................................................................................................................................... 18
+15.1 指令数据格式....................................................................................................................................18
+15.2 MID_SNAPIMAGE............................................................................................................................... 30
+15.3 MID_GETSAVEDIMAGE & MID_UPLOADIMAGE................................................................................ 30
+15.4 MID_GET_LOGFILE & MID_UPLOAD_LOGFILE...................................................................................30
+15.5 MID_SET_RELEASE_ENC_KEY.............................................................................................................30
+15.6 MID_INIT_ENCRYPTION......................................................................................................................30
+15.7 MID_SET_INTERACTIVATE..................................................................................................................31
+15.8 MID_TRANS_FILE_PACKET................................................................................................................. 31
+
+==== PAGE 4 ====
+https://www.xitu3d.com/
+4
+通讯协议
+模组和主控之间采用串口方式通信，本章将阐述串口的配置及通信的协议。
+1 串口配置
+模组和主控串口通讯波特率为115200bps，具体参数表1 所示. 按主控要求，可以支持其他波特
+率。
+表1
+配置项
+说明
+波特率
+支持大多波特率, 默认115200
+硬件/软件流控制
+不使用
+数据位
+8
+停止位
+1
+奇偶校验位
+不使用
+2 通信消息格式
+主控与模块通信的基本消息格式如表2 所示。
+表2
+SyncWord
+MsgID
+Size
+Data
+ParityCheck
+2 bytes
+1 byte
+2 bytes
+N bytes
+1 byte
+表2-1(定制)
+SyncWord
+MsgID
+Size
+SequenceID
+Data
+ParityCheck
+2 bytes
+1 byte
+2 bytes
+4 bytes
+N bytes
+1 byte
+表2-1 为添加SequenceID 的数据包结构，有特定要求的时候才添加，上位机发的数据包里面有
+SequenceID 时，人脸模组返回的应答也要包括SequenceID，目的为确定是哪个指令的应答。、
+SequenceID = (seq_id[0] << 24) | (seq_id[1] << 16) | (seq_id[2] << 8) | (seq_id[3]);
+表3 是对各个字段的详细说明。
+表3
+字段
+长度
+说明
+SyncWord
+2bytes
+固定的消息开头同步字0xEF 0xAA
+
+==== PAGE 5 ====
+https://www.xitu3d.com/
+5
+MsgID
+1byte
+消息ID (例如RESET)
+Size
+2bytes
+Data size, 单位byte
+Data
+N bytes
+消息对应的data, 如command 消息对应的参数。
+65535>=N>=0，N=0 表示此消息无参数。
+Parity
+Check
+1 byte
+协议的奇偶校验码，计算方式为整条协议除去Sync Word
+部分后，其余字节按位做XOR 运算。
+3 通信消息说明
+每条消息处理都对应有timeout 超时时间定义，timeout 指的是主控等待模块处理的最长时间，
+即模块反馈处理完成的时间。
+当指令处理超时，主控可采用如下几种处理方式:
+1.发送MID_GETSTATUS 指令
+此消息能快速获取模块的工作状态，若死机则无返回，主控可直接断电。
+发送RESET 指令
+停止所有当前的处理，模块进入standby 的状态，等待主控新的指令。
+3.认为模块死机
+主控可采用断电重启的处理方式。
+具体指令格式请参考[15.1]。
+4 模块消息的发送和接收
+4.1 消息接收(H>>M)
+模块接收到的完整协议格式如表4 所示，主控应按照该格式向模块发送命令。
+表4
+名称
+SyncWord
+MsgID
+Size
+Data
+ParityCheck
+字节数
+2 bytes
+1 byte
+2 bytes
+N bytes
+1 byte
+内容
+0xEFAA
+command
+高
+八
+位
+低
+八
+位
+data
+checksum
+command 和data 的具体说明请参考[15.1]
+
+==== PAGE 6 ====
+https://www.xitu3d.com/
+6
+4.2 消息发送(M>>H)
+模块主要发送三种类型的消息，分别是REPLY，NOTE，IMAGE。
+1) REPLY 消息的发送
+Reply 是模块对主控发送出的命令的应答，对于主控的每条命令，模块最终都会进行reply。
+主控发送给模块的每条命令，最终都会收到模块的MID_REPLY 回复，该消息包含主控发送的命令
+mid，命令的执行结果result，以及可能返回的数据data。
+模块向主控发送的REPLY 消息的完整协议如表5 所示。
+表5
+名称
+SyncWord
+MsgID
+Size
+Data
+ParityCheck
+字节数
+2 bytes
+1 byte
+2 bytes
+N bytes
+1 byte
+内容
+0xEFAA
+MID_REPLY
+(0x00)
+高
+八
+位
+低
+八
+位
+s_msg_reply_data
+checksum
+mid
+(1byte)
+result
+(1byte)
+data[0]
+(n-byte)
+mid 表示模块当前正在处理的任务，例如当mid = MID_ENROLL(0x13)时，表示该消息是模块处理
+完enroll 任务后回复的消息。
+result 表示该命令的执行结果，详细如表6 所示。
+表6
+result
+code
+说明
+MR_SUCCESS
+0
+成功
+MR_REJECTED
+1
+模块拒绝该命令
+MR_ABORTED
+2
+录入/解锁算法已终止
+MR_FAILED4_CAMERA
+4
+相机打开失败
+MR_FAILED4_UNKNOWNREASON
+5
+未知错误
+MR_FAILED4_INVALIDPARAM
+6
+无效的参数
+MR_FAILED4_NOMEMORY
+7
+内存不足
+MR_FAILED4_UNKNOWNUSER
+8
+没有已录入的用户
+MR_FAILED4_MAXUSER
+9
+录入超过最大用户数量
+MR_FAILED4_FACEENROLLED
+10
+人脸已录入
+
+==== PAGE 7 ====
+https://www.xitu3d.com/
+7
+MR_FAILED4_LIVENESSCHECK
+12
+活体检测失败
+MR_FAILED4_TIMEOUT
+13
+录入或解锁超时
+MR_FAILED4_AUTHORIZATION
+14
+加密芯片授权失败
+MR_FAILED4_READ_FILE
+19
+读文件失败
+MR_FAILED4_WRITE_FILE
+20
+写文件失败
+MR_FAILED4_NO_ENCRYPT
+21
+通信协议未加密
+MR_FAILED4_NO_RGBIMAGE
+23
+RGB 图像没有ready
+MR_FAILED4_UNKNOWN_HANDUSER
+239
+掌静脉验证失败
+MR_FAILED4_NOCAMERA
+240
+不支持彩色镜头
+MR_FAILED4_HANDENROLLED
+241
+掌静脉重复
+示例：0xEF 0xAA 0x00 0x00 0x04 0x13 0x00 0x00 0x01 0x16
+名
+称
+SyncWord
+MsgID
+Size
+Data
+Parity
+Check
+内
+容
+0xEFAA
+0x00
+(MID_RE
+PLY)
+0x00
+0x04
+s_msg_reply_data
+0x11
+0x13
+(MID_E
+NROLL)
+0x00
+(MR_SU
+CCESS)
+0x00
+(use
+r_id
+_heb
+)
+0x01
+(use
+r_id
+_leb
+)
+这条消息表示这是模块回复给主控的REPLY 消息，数据部分占4 字节，录入成功且录入的用户ID
+是1。
+2) NOTE 消息的发送
+Note 是模块主动发给主控的信息, 根据note id 判断消息类型和适配的data 结构。
+MSG::NOTE 为模块向主控主动上报的信息，例如当模块上电后会主动向主控发送一条NOTE，表明
+自己已经READY，可以接收主控的命令，主控收到该NOTE 消息后即可开始发送录入或者解锁命令。
+NOTE 消息主要作用是主动向主控返回一些信息，目前NOTE 消息主要在三种情况下发送：
+a)开机时模块向主控发送NID_READY
+b)录入过程中模块向主控发送人脸信息
+
+==== PAGE 8 ====
+https://www.xitu3d.com/
+8
+c)解锁过程中模块向主控发送人脸信息
+模块向主控发送的NOTE 消息的完整协议如表7 所示。
+表7
+名称
+SyncWord
+MsgID
+Size
+Data
+ParityCheck
+字节数
+2 bytes
+1 byte
+2 bytes
+N bytes
+1 byte
+内容
+0xEFAA
+MID_NOTE
+(0x01)
+高
+八
+位
+低
+八
+位
+s_msg_note_data
+checksum
+nid
+(1byte)
+data[0]
+(n-bytes)
+nid 表示enroll 过程中算法的执行结果，详细如下：
+表8
+nid (*表示携带data)
+code
+说明
+NID_READY*
+0
+模块已准备好
+NID_FACE_STATE*
+1
+算法执行成功，并且返回人脸信息
+s_note_data_face
+NID_UNKNOWNERROR
+2
+未知错误
+NID_OTA_DONE*
+3
+OTA 升级完毕
+NID_EYE_STATE
+4
+解锁过程中睁闭眼状态
+NID_READY 的date[0]为一个字节，表示模组固件种类，主控忽略即可。
+NID_OTA_DONE 的date[0]为一个字节。0：OTA success，1：OTA fail。
+NID_EYE_STATE 的data[0]为一个字节。
+12：闭眼模式下检测到睁眼状态，13：持续一秒均闭眼状态，14：无法确认的状态。
+NID_FACE_STATE 所携带的数据data 主要存储了人脸信息，详细如下：
+表9
+结构
+s_note_data_face
+内容
+state
+left
+top
+right
+bottom
+yaw
+pitch
+roll
+类型
+int16_t
+int16_t
+int16_t
+int16_t
+int16_t
+int16_t
+int16_t
+int16_t
+字节
+2bytes
+2bytes
+2bytes
+2bytes
+2bytes
+2bytes
+2bytes
+2bytes
+
+==== PAGE 9 ====
+https://www.xitu3d.com/
+9
+state:表示人脸当前的状态，主要包括以下几种情况：
+表10
+人脸状态(state)
+code
+说明
+FACE_STATE_NORMAL
+0
+人脸正常
+FACE_STATE_NOFACE
+1
+未检测到人脸
+FACE_STATE_TOOUP
+2
+人脸太靠近图片上边沿，未能录入
+FACE_STATE_TOODOWN
+3
+人脸太靠近图片下边沿，未能录入
+FACE_STATE_TOOLEFT
+4
+人脸太靠近图片左边沿，未能录入
+FACE_STATE_TOORIGHT
+5
+人脸太靠近图片右边沿，未能录入
+FACE_STATE_FAR
+6
+人脸距离太远，未能录入
+FACE_STATE_CLOSE
+7
+人脸距离太近，未能录入
+FACE_STATE_EYEBROW_OCCLUSION
+8
+眉毛遮挡
+FACE_STATE_EYE_OCCLUSION
+9
+眼睛遮挡
+FACE_STATE_FACE_OCCLUSION
+10
+脸部遮挡
+FACE_STATE_DIRECTION_ERROR
+11
+录入人脸方向错误
+FACE_STATE_EYE_CLOSE_STATUS_
+OPEN_EYE
+12
+在闭眼模式检测到睁眼状态
+FACE_STATE_EYE_CLOSE_STATUS
+13
+闭眼状态
+FACE_STATE_EYE_CLOSE_UNKNOW_
+STATUS
+14
+在闭眼模式检测中无法判定睁闭眼状态
+FACE_STATE_HAND_NORMAL
+128
+检测到掌静脉
+FACE_STATE_HAND_FAR
+129
+手掌距离太远，未能录入
+FACE_STATE_HAND_CLOSE
+130
+手掌距离太近，未能录入
+FACE_STATE_HAND_TOOUP
+131
+手掌太靠近图片上边沿，未能录入
+FACE_STATE_HAND_TOODOWN
+132
+手掌太靠近图片下边沿，未能录入
+FACE_STATE_HAND_TOOLEFT
+133
+手掌太靠近图片左边沿，未能录入
+FACE_STATE_HAND_TOORIGHT
+134
+手掌太靠近图片右边沿，未能录入
+s_note_data_face 中其它成员的具体含义如下所示：
+left:人脸框距离图片最左侧的距离（负数表示人脸框已超出图片最左侧）
+
+==== PAGE 10 ====
+https://www.xitu3d.com/
+10
+top:人脸框距离图片最上方的距离（负数表示人脸框已超出图片上方）
+right:人脸框距离图片最右侧的距离（负数表示人脸框已超图片最右侧）
+bottom:人脸框距离图片最下方的距离（负数表示人脸框已超出图片最下方）
+yaw, pitch, roll 表示的旋转方向分别如下图所示。其中yaw 为负表示左转头，yaw 为正表示右
+转头；pitch 为负表示向上抬头，pitch 为正表示向下低头；roll 为负表示向右歪头，roll 为正表示
+向左歪头。
+示例：0xEF 0xAA 0x01 0x00 0x01 0x00 0x00
+名
+称
+SyncWord
+MsgID
+Size
+Data
+ParityCheck
+内
+容
+0xEFAA
+0x01
+(MID_NO
+TE)
+0x00
+0x01
+s_msg_note_data
+0x00
+0x00
+(NID_READY)
+无
+这条消息表示这是模块向主控发送的NOTE 消息，数据长度为1 字节，模块已经准备好接收其他
+命令。
+3) IMAGE 消息发送
+模块给主控传送图片。
+模块向主控发送的IMAGE 消息的完整协议如表11 所示。
+表11
+
+==== PAGE 11 ====
+https://www.xitu3d.com/
+11
+名称
+SyncWord
+MsgID
+Size
+Data
+ParityCheck
+字节数
+2 bytes
+1 byte
+2
+bytes
+N bytes
+1 byte
+内容
+0xEFAA
+MID_IMA
+GE
+(0x02)
+高
+八
+位
+低
+八
+位
+image data
+checksum
+人脸模块传输图片时，一帧数据最大支持4000 字节数据的传输。
+5 主控接收消息流程
+主控接收模块发送的消息可以遵循图1 所示流程。
+图1
+
+==== PAGE 12 ====
+https://www.xitu3d.com/
+12
+6 一般消息处理流程
+图2
+7 上下电流程
+模块上电后，约需1.1 秒时间进行初始化工作。在此期间，模块不能响应上位机命令。模块完成
+初始化工作后会立即发送状态通知包给上位机，表示模块已经可以正常工作并接收上位机指令。
+主控主动控制模块的上电和下电，如图3 所示。模块上电即进入启动流程，启动进入standby
+状态会通知主控MSG::NOTE::READY，主控开始发送命令消息，模块处理并返回结果。
+如果在2 秒之内模块没有回应，主控调用MSG::POWERDOWN，模块做处理返回，主控可断电。
+
+==== PAGE 13 ====
+https://www.xitu3d.com/
+13
+图3
+8 录入流程
+
+==== PAGE 14 ====
+https://www.xitu3d.com/
+14
+图4
+在录入过程中，人脸模块不限制录入方向的顺序，用户可以任意组合录入方向的顺序，图4 是以
+其中一种顺序为例进行说明。
+当主控下达录入某个方向的人脸的指令后，模块开始工作，并实时地返回人脸的状态、位置、姿
+态等信息（以NOTE 消息的形式返回），用户可根据该信息提醒录入人进行姿态位置的调整，当录入
+成功后，模块将以REPLY 消息的形式返回录入结果，如果录入不成功，模块也会相应地返回失败的原
+因。
+值得注意的是，当模块拿到的第一帧图片就录入成功时，将直接以REPLY 消息的形式返回结果。
+录入过程中可通过FACE RESET 指令终止录入,先前的录入状态也会清零。
+如果在录入过程中突然断电，之前录入的人脸也不会保存。
+9 录入说明
+人脸录入各个方向的角度说明如下：
+表12
+录入方向
+偏转角度
+正脸
+正对摄像头，无偏转角度
+向上
+正脸向上偏转5~55 度
+向下
+正脸向下偏转5~55 度
+向右
+正脸向右偏转8~60 度
+向左
+正脸向左偏转8~60 度
+其中，向上和向下偏转如图5 所示。
+图5
+向左和向右偏转如图6 所示。
+
+==== PAGE 15 ====
+https://www.xitu3d.com/
+15
+图6
+请不要采用如图7 所示的转头方式。
+图7
+我们建议用户在实际录入的过程中，缓缓向某个方向转头，并且保持偏转，请不要过快的转头或
+者立刻回归正脸状态。
+10 单帧录入
+单帧录入相比录入流程的区别，主要在于单帧录入只需要一张正脸即可录入成功。而不需要交互
+五次完成注册。
+11 解锁流程
+
+==== PAGE 16 ====
+https://www.xitu3d.com/
+16
+图8
+12 解锁流程说明
+模块处理主控的请求，进入解锁流程，期间会实时地返回人脸的状态，位置，姿态等信息，用户
+可根据该信息提示解锁人调整姿态，位置。
+解锁成功后会返回解锁人的ID，name，admin 等信息，解锁不成功会返回相应的原因。
+13 加密通信流程
+加密通信流程如图9 所示。
+1. 主控给人脸模组上电
+2. 人脸模组发送READY（明文）给主控
+3. 模组第一次开机需要调用MID_SET_RELEASE_ENC_KEY 指令设置私有协议需要的16bytes 序列。
+主控采用随机数生成随机序列并发送给人脸模组（4bytes）
+4. 人脸模组和主控双方根据这随机序列，采用自定义的私有协议生成16bytes 的密码。双方采用
+相同算法生成相同的密码。之后双方本次会话都采用此密码加解密
+5. 人脸模组返回状态并采用随机密码AES 加密发送产品序列号给主控
+6. 主控解密，鉴别设备ID 确认身份后开始处理需求指令，录入或解锁等。
+7. 主控采用随机生成的密码，AES 加密的方式对指令和数据加密并发送给人脸模组
+8. 人脸模组用第4 步解密出来的密码解密，判断指令合法性并处理该指令
+9. 人脸模组用第4 步解密出来的密码对指令处理结果和数据加密，并发送给主控
+
+==== PAGE 17 ====
+https://www.xitu3d.com/
+17
+图9
+14 OTA 升级流程
+1. 主控发送MID_START_OTA（加密通信）通知模块儿进入OTA 模式；
+2. 模块儿反馈OK（不加密通信，后面的都是不加密模式），表示进入了OTA 模式；
+3. 主控发送MID_CONFIG_BAUDRATE 配置更高波特率，模块儿反馈OK 后，主机同步设置相同波特
+率。延时100ms 后才能开始串口数据传输。（该配置过程可选，波特率默认是115200）
+4. 主控发送MID_OTA_HEADER，把固件相关信息发送到模块儿；
+5. 模块儿反馈OK；
+6. 主控发送MID_GET_OTA_STATUS；
+7. 模块儿反馈OTA 状态和起始包序号；
+8. 主控循环发送升级包MID_OTA_PACKET，收到OK 后，继续下一包。
+9. 模块儿收完固件后，开始升级。
+10.模块儿升级结束反馈NID_OTA_DONE。
+具体流程参照：
+
+==== PAGE 18 ====
+https://www.xitu3d.com/
+18
+15 补充说明
+15.1 指令数据格式
+模组支持的所有指令在表13 所示。
+Data 列中接收数据为表4 的Data 部分。
+Data 列中发送数据为表5:MID_REPLY 指令:s_msg_reply_data 的data 部分。
+表13
+MsgID/Timeout(ms)
+Code
+Data
+参数(bytes)
+说明
+MID_RESET/200
+0x10
+停止所有当前在处理的消息, 模块进入standby 状态
+主控发送这条命令后，模块将取消之前正在执行的命令（例如录
+入、解锁等），返回STANDBY 状态。
+接收: 无
+发送: 无
+MID_GETSTATUS/200
+0x11
+主控发送该命令后，模组返回自身当前的状态
+接收: 无
+发送: s_msg_reply_getstatus_data
+status(1)
+模组的状态包括：
+0: MS_STANDBY(模组处于空闲状态，
+等待主控命令)
+1: MS_BUSY(模组处于工作状态)
+2: MS_ERROR(模组出错，不能正常工
+作)
+3: MS_INVALID(模组未进行初始化)
+4: MS_OTA(OTA 升级中)
+MID_VERIFY
+0x12
+鉴权解锁,Timeout 为验证指令执行超时
+接收: s_msg_verify_data
+pd_rightaway(1)
+表示是否在解锁后立刻关机；
+解锁成功后是否立刻断电(yes:1,no:
+0)
+Deprecated now
+timeout(1)
+解锁超时时间(单位s)
+[timeout] 为解锁超时时间（单位
+s），默认为10s，可以在发送解锁命
+令时设置，超时时间用户可以任意设
+定，最大不超过255s。
+
+==== PAGE 19 ====
+https://www.xitu3d.com/
+19
+verify_mode(1)
+注册模式
+0: 标准
+1: 掌静脉(预留)
+2: 虹膜(预留)
+4: 二维码识别(预留)
+8: 人脸/掌静脉(预留)
+有需求的特殊项目才用此参数
+列如12 表示都识别人脸和二维码，4
+表示只识别二维码，8 不识别二维
+码。
+发送: s_msg_reply_verify_data
+user_id_heb(1)
+已验证用户的ID
+只有当result 结果为MR_SUCCESS 时
+才有user_id
+识别二维码时的用户ID 为0
+user_id_leb(1)
+user_name(32)
+用户名字
+模组识别到二维码时，这里内容为已
+识别出来的二维码字符串。
+要识别的二维码长度大于32 时，
+user_name 的长度也被扩大为
+256byte.
+admin(1)
+是否为管理员
+unlockStatus(1)
+解锁过程中睁闭眼状态
+200: 人脸验证成功
+204: 人脸验证成功, 闭眼睛
+250: 掌静脉验证成功
+MID_ENROLL
+0x13
+新用户录入,Timeout 为执行注册指令超时,不允许重复注册
+接收: s_msg_enroll_data
+admin(1)
+指明该录入的人为管理员
+是否设置为管理员(yes:1,no:0 )
+user_name(32)
+录入用户姓名
+face_direction(1)
+用户需要录入的方向，具体参数如表
+12 所示
+timeout(1)
+录入超时时间（单位s）
+发送: s_msg_reply_enroll_data
+user_id_heb(1)
+已注册用户的ID
+只有当result 结果为MR_SUCCESS 时
+才有user_id
+user_id_leb(1)
+
+==== PAGE 20 ====
+https://www.xitu3d.com/
+20
+判断重复注册时返回已注册用户的
+ID(有特定要求才实现)
+face_direction(1)
+各个方向人脸的录入状态
+face_data(n)
+单方向注册(0x1D)的注册方向为
+FACE_DIRECTION_RENT(0xFC)
+时，把注册数据保存到这里，数据格
+式跟服务器特征数据转换LIB 一样，
+可以用
+MID_TRANS_FILE_PACKET(0x90)
+指令传输数据进行注册。
+MID_SNAPIMAGE
+0x16
+抓拍图片并存储到本地
+接收: s_msg_snap_image_data
+image_counts(1)
+抓拍图片的数量
+start_number(1)
+抓拍图片的起始编号（1-10）
+发送: 无
+MID_GETSAVEDIMAGE/500
+0x17
+获取待上传图片大小
+接收: s_msg_get_saved_image_data
+image_number(1)
+待传输图片的编号
+0: 获取现场图片，带彩色镜头的模
+组，在亮度足够的地方，可以获取彩
+色图像，不带彩色镜头的模组只能获
+取红外图像，应答为图片大小。
+>0: 发MID_SNAPIMAGE 指令获取的当
+前图像大小(bytes)。
+image_width(2)
+image_number 为0 时，才能设定，设
+定接收图像的宽度, LSB 格式，不需
+要设定时，就不加到数据段里面，或
+者设定为0 即可。
+image_height(2)
+image_number 为0 时，才能设定，
+设定接收图片的长度，LSB 格式. 不
+需要设定时，就不加到数据段里面，
+或者设定为0 即可。
+发送: s_msg_reply_get_saved_image_data
+image_size(4)
+待上传图片大小,MSB
+MID_UPLOADIMAGE/10000
+0x18
+将本地存储的图片上传到主控
+接收: s_msg_upload_image_data
+
+==== PAGE 21 ====
+https://www.xitu3d.com/
+21
+upload_image_offset(4)
+待上传图片的偏移量, MSB
+upload_image_size(4)
+此次上传图片的大小(最大4K), MSB
+发送: image_data
+data(n)
+n:主控要求上传的size
+实际图片
+MID_ENROLL_SINGLE
+0x1D
+单帧录入,需要等待上位机注册命令设定的Timeout，允许
+重复注册
+接收: s_msg_enroll_data
+admin(1)
+是否设置为管理员(yes:1,no:0 )
+user_name(32)
+录入用户姓名
+face_direction(1)
+用户需要录入的方向，具体参数如表
+12 所示。
+人脸5 个方向之外还有两个参数
+FACE_DIRECTION_HAND 和
+FACE_DIRECTION_PICTURE，设定为
+FACE_DIRECTION_HAND，进行掌静脉注
+册，设定为
+FACE_DIRECTION_PICTURE，进行照片
+下发注册。
+FACE_DIRECTION_RENT(0xFC),把注册
+数据传输到锁板，只传输数据，模组
+本身不进行注册。
+timeout(1)
+录入超时时间（单位s）
+发送: s_msg_reply_enroll_data
+跟MID_ENROLL 指令的应答一致。
+MID_DELUSER/1000
+0x20
+删除一个已注册的用户
+接收: s_msg_deluser_data
+user_id_heb(1)
+待删除用户的ID
+user_id_leb(1)
+user_type(1)
+用户种类
+0: 人脸
+1: 掌静脉
+发送: 无
+MID_DELALL
+0x21
+删除所有注册用户
+接收: s_msg_del_all_data
+
+==== PAGE 22 ====
+https://www.xitu3d.com/
+22
+type(1)
+设定删除方式
+0: 删除所有用户
+1: 删除人脸用户
+2: 删除掌静脉用户
+3: 删除普通用户
+4: 删除设定范围内的用户，范围为
+[begin_user_id, end_user_id]
+begin_user_id_heb(1)
+Type=4 时，用户ID 范围的开始号
+begine_user_id_leb(1)
+end_user_id_heb(1)
+Type=4 时，用户ID 的结束号
+end_user_id_leb(1)
+发送: 无
+MID_GETUSERINFO/1000
+0x22
+获得某个注册用户的信息
+接收: s_msg_getuserinfo_data
+user_id_heb(1)
+已注册用户的ID
+user_id_leb(1)
+发送: s_msg_reply_getuserinfo_data
+user_id_heb(1)
+已注册用户的ID
+user_id_leb(1)
+user_name(32)
+已注册用户的姓名
+admin(1)
+是否为管理员
+MID_FACERESET/200
+0x23
+重置算法状态，如果正在进行交互式录入，会清空已录入的方向
+消息为重置SDK 算法状态，如果正在进行交互式录入，发送此消
+息会重置录入的状态，已录入的方向全部被清空。
+接收: 无
+清除录入状态
+发送: 无
+MID_GET_ALL_USERID/1000
+0x24
+获取所有已注册用户的数量和ID
+接收: s_msg_get_all_userid_data
+fmt(1)
+获取所有已注册用户的数量和ID
+设定应答格式
+0: 人脸用户(应答数据格式为长)
+1: 人脸用户(应答数据格式为短)
+2: 掌静脉用户(应答数据格式为短)
+
+==== PAGE 23 ====
+https://www.xitu3d.com/
+23
+发送: s_msg_reply_all_userid_data, fmt=0
+user_counts(1)
+已注册用户数量
+users_id[MAX_USER_COUNTS*2]
+所有已注册用户ID，使用连续两
+个字节存储一个ID，先存高八位
+MAX_USER_COUNTS 为最大用户数量
+发送: s_msg_reply_all_userid_data_fmt1, fmt=1,2
+user_counts(1)
+已注册用户数量
+users_id[(MAX_USER_COUNTS +
+7) / 8]
+已注册的用户ID.
+一个位表示一个用户，MAX_USER_COU
+NTS 为最大人脸用户/掌静脉用户数
+量。
+列user_id 为0x08 0x03 时的用户编
+号为4,9,10。
+MID_ENROLL_ITG
+0x26
+集成支持并扩展所有录入方式
+需要等待上位机注册命令设定的Timeout
+接收: s_msg_enroll_itg
+admin(1)
+是否设置为管理员(yes:1 no:0 )
+user_name(32)
+录入用户姓名
+face_dir(1)
+用户需要录入的方向，具体参数如表
+12 所示
+enroll_type 为0 时才有用。
+注册掌静脉时，把face_dir 设置为
+FACE_DIRECTION_HAND(0xFD)即可。
+enroll_type(1)
+注册类型：交互录入或单帧录入
+0: 交互录入(跟MID_ENROLL 一样的方
+式)
+1: 单帧录入(跟MID_ENROLL_SINGLE
+一样的方式)
+enable_duplicate(1)
+是否重复录入
+0：不可以同一个人录入，
+但是
+user name 可以重复。
+1：可以同一个人重复录入，user
+name 也可以重复。
+2：可以同一个人录入，但是user
+name 不可以重复(仅在RGB 注册时有
+效)。
+timeout(1)
+录入超时时间（单位s）
+
+==== PAGE 24 ====
+https://www.xitu3d.com/
+24
+reserved(3)
+reserved,以后会去掉的. 目前输入0
+即可。
+发送: s_msg_reply_enroll_data
+user_id_heb(1)
+已注册用户的ID
+只有当result 结果为MR_SUCCESS 时
+才有user_id
+user_id_leb(1)
+face_direction(1)
+各个方向人脸的录入状态
+MID_GET_VERSION/1000
+0x30
+获得软件版本信息
+接收: 无
+发送: s_msg_reply_version_data
+version_info(32)
+版本信息
+MID_START_OTA
+0x40
+进入OTA 升级模式
+接收: s_msg_startota_data
+v_primary(1)
+固件版本号
+补充说明
+若v_primary 和v_secondary 为0xf
+f，v_revision 为0xfe，则进入出租
+房项目照片下发模式，但照片需要先
+通过易胜提供的软件转换为注册数据
+后再下发。
+v_secondary(1)
+v_revision(1)
+ota_part(1)
+升级类型, reserved
+发送: 无
+MID_STOP_OTA
+0x41
+退出OTA 模式，模组重启。
+接收: 无
+发送: 无
+MID_GET_OTA_STATUS
+0x42
+获取OTA 状态以及传输升级包的起始包序号
+接收: 无
+发送: s_msg_reply_getotastatus_data
+ota_status(1)
+4 表示处于OTA 状态中
+next_pid_e(2)
+传输固件包的起始序号
+MID_OTA_HEADER
+0x43
+发送升级包的大小，总包数，分包的大小，升级包的md5 值
+接收: s_msg_otaheader_data
+fsize_b(4)
+固件大小，高位在前(MSB)
+num_pkt(4)
+总包数，高位在前(MSB)
+
+==== PAGE 25 ====
+https://www.xitu3d.com/
+25
+pkt_size(2)
+每包大小，高位在前(MSB)
+md5_sum(32)
+固件MD5 值, reserved
+发送: 无
+MID_OTA_PACKET
+0x44
+发送升级包：包序号，包大小，包数据。
+接收: s_msg_otapacket_data
+pid(2)
+分包序号,MSB
+psize(2)
+分包大小,MSB
+data(n)
+分包内容
+发送: 无
+MID_INIT_ENCRYPTION/1000
+0x50
+设置加密随机数
+接收: s_msg_init_encryption_data
+seed(4)
+主控发送一个随机数
+mode(1)
+加密模式
+0: 不加密
+1: AES 加密
+2: SINGLE 加密
+发送: s_msg_reply_init_encryption_data
+device_id(20)
+设备id 信息
+MID_CONFIG_BAUDRATE/100
+0x51
+OTA 模式下设定通信口波特率
+接收: s_msg_config_baudrate
+baudrate_index(1)
+波特率
+1: 115200bps
+2: 230400bps
+3: 460800bps
+4: 1500000bps
+5: 9600bps
+6: 19200bps
+7: 38400bps
+8: 57600bps
+发送: 无
+MID_SET_RELEASE_ENC_KEY
+0x52
+设定量产加密秘钥序列，掉电会保存
+接收: s_msg_enc_key_number_data
+enc_key_number(16)
+加密序列
+发送: 无
+
+==== PAGE 26 ====
+https://www.xitu3d.com/
+26
+除了初次设置，从第二次设置开始处
+理为失败。
+MID_SET_DEBUG_ENC_KEY
+0x53
+设定调试加密秘钥序列，掉电丢失
+接收: s_msg_enc_key_number_data
+enc_key_number(16)
+加密序列
+发送: 无
+MID_GET_LOGFILE/1000
+0x60
+保存log 到内存中
+接收: s_msg_get_logfile_data
+log_type(1)
+设定数据格式
+0: 一般数据
+2: 获取注册数据
+user_id_heb(1)
+若log_type 为2，用户的ID 为
+0，则获取所有用户的注册数据。
+若大于0，只获取对应用户的注册数
+据。
+user_id_leb(1)
+发送: s_msg_reply_get_log_data
+log_size(4)
+待上传log 的大小,MSB
+MID_UPLOAD_LOGFILE
+0x61
+将保存的log 上传至主控
+接收: s_msg_upload_logfile_data
+upload_logfile_offset(4)
+待上传日志的偏移量,MSB
+upload_logfile_size(4)
+此次上传日志的大小(最大4K), MSB
+发送: log_data
+data(n)
+实际日志信息
+n:主控要求上传的size
+MID_UVC_DIR
+0x76
+接收: s_msg_uvc_dir_data
+rotate(1)
+旋转镜头输出的视频方向
+0: 0°
+1: 90°
+发送: 无
+MID_TRANS_FILE_PACKET
+0x90
+接收: s_msg_trans_file_data
+store_type(1)
+一般设置为0
+指定注册的用户ID 时设置为0xFE
+feat_size(4)
+文件大小(byte),MSB
+offset(4)
+数据段的位置,MSB
+psize(2)
+数据段的长度,MSB
+
+==== PAGE 27 ====
+https://www.xitu3d.com/
+27
+data(psize)
+数据段
+最后数据包(offset=0, psize=0) 的
+store_type 设置为0xFE ，数据
+（data）部分的2byte(MSB)给予用户
+ID，传输几个用户数据时，只能设定
+第一个用户的ID,若设定的ID 已有注
+册的用户，则处理为注册失败
+发送: s_msg_reply_trans_file_data
+usercount(1)
+已注册的用户数量
+userids(usercount*2)
+已注册用户的ID 数组, 每个id 大小
+为2byte，LSB
+MID_ENROLL_FROM_IMAGE
+0x91
+接收: s_msg_enroll_from_img_data
+admin(1)
+是否设置为管理员(yes:1 no:0 )
+user_name(32)
+录入用户姓名
+img_type(1)
+0, reserved
+timeout(1)
+录入超时时间（单位s）
+发送: s_msg_reply_enroll_data
+和MID_ENROLL 指令的应答一样
+MID_GET_UID
+0x93
+接收: 无
+发送: s_msg_reply_init_encryption_data
+跟MID_INIT_ENCRYPTION 指令的应答
+一样
+MID_CAMERA_FLIP
+0xC2
+接收: s_msg_demomode_data
+enable(1)
+设定红外镜头的识别方向
+0: 不旋转
+1: 旋转180°
+备注:不保存方向配置，断电配置就恢
+复到默认正装。
+发送: 无
+MID_FUNC_CTRL
+0xC7
+打开/关闭人脸模组的特定功能
+接收: s_msg_func_ctrl_data
+reserved(1)
+需要设置为0
+enable(1)
+bit[0]
+0: 关闭人脸识别功能
+
+==== PAGE 28 ====
+https://www.xitu3d.com/
+28
+1: 打开人脸识别功能
+reserved(3)
+reserved
+发送: 无
+MID_SET_THRESHOLD_LEVEL
+0xD4
+设置算法安全等级
+接收: s_msg_algo_threshold_level
+verify_threshold_level(1)
+数据范围: 0-4,
+最小: 0, 最大: 4, 标准: 2
+liveness_threshold_level(1)
+数据范围: 0-4,
+最小: 0, 最大: 4, 标准: 2
+发送: 无
+MID_GETLIBRARY_VERSION/1000
+0xF3
+获取当前库版本信息
+接收: 无
+发送: s_msg_reply_library_version_data
+version_info(20)
+版本信息
+MID_DEMOMODE/100
+0xFE
+进入演示模式。主控发送该命令后，模块进入演示模式，这种模
+式下模块鉴权的流程中将不做特征比对，即所有人都可以解锁，
+但是仍然会进行活体检测。
+接收: s_msg_demomode_data
+enable(1)
+1: enable
+0: disable
+发送: 无
+MID_SNAPIMAGE2
+0xFF
+可以获取人脸部分的图像
+接收: s_msg_snap_image2_data
+reserved1(1)
+reserved
+reserved2(1)
+reserved
+reserved3(1)
+reserved
+crop_face(1)
+1: 只获取人脸部分的图像(彩色)
+此指令在设置的超时工作到检测
+人脸的时候. 人脸图像使用
+MID_GETSAVEDIMAGE 获取，
+image_number=0, image_width=128,
+image_height=128
+人脸区域为正方形，则image_width
+和image_height 需要一样，最大值为
+320。
+0: 获取现场图像(reserved)
+timeout(1)
+获取超时(s)
+
+==== PAGE 29 ====
+https://www.xitu3d.com/
+29
+发送: 无
+人脸方向参数表14 所示.
+使用MID_ENROLL_SINGLE 指令时，上下左右参数无效，参数设置为FACE_DIRECTION_HAND 时，注
+册掌静脉，参数设置为FACE_DIRECTION_PICTURE 时，通过MID_START_OTA 发过来的照片数据进行人
+脸注册。
+表14
+st_face_dir
+(人脸方向定义)
+code
+说明
+FACE_DIRECTION_UP
+0x10
+录入朝上的人脸
+FACE_DIRECTION_DOWN
+0x08
+录入朝下的人脸
+FACE_DIRECTION_LEFT
+0x04
+录入朝左的人脸
+FACE_DIRECTION_RIGHT
+0x02
+录入朝右的人脸
+FACE_DIRECTION_MIDDLE
+0x01
+录入正向的人脸
+FACE_DIRECTION_UNDEFINE
+0x00
+未定义，默认为正向
+FACE_DIRECTION_FACE_ONLY
+0x40
+录入正向的人脸，只检测人脸注册的方式(reserved)
+FACE_DIRECTION_RENT
+0xFC
+单帧注册后向上位机传输注册数据
+FACE_DIRECTION_HAND
+0xFD
+录入掌静脉
+FACE_DIRECTION_PICTURE
+0xFE
+出租房项目远程注册人脸(通过MID_START_OTA 指令收到彩色
+图片之后，使用此指令进行注册人脸)
+MID_ENROLL, MID_ENROLL_ITG 指令应答中的face_direction 表示人脸录入状态，数据的低5 位
+从高到低分别表示人脸方向的朝上、朝下、朝左、朝右和正向，如下图所示，1 表示该朝向已录入，0
+表示该朝向未录入。
+图10
+
+==== PAGE 30 ====
+https://www.xitu3d.com/
+30
+15.2 MID_SNAPIMAGE
+该命令为图片抓拍，主控下达该指令，并携带需抓拍图片的数量以及抓拍图片的起始编号后，模
+块会立刻进行抓拍，将抓拍到的图片按照起始编号依次向后命名并存于本地(jpg 格式)。该功能最大
+支持本地存储的图片数量为10 张，图片编号为1-10，当主控发送的编号与本地图片编号重复时，将
+覆盖原始图片。
+15.3 MID_GETSAVEDIMAGE & MID_UPLOADIMAGE
+抓拍的图片将存储在模组本地路径下，主控获取抓拍图片时，首先调用MID_GETSAVEDIMAGE 命令
+获取待上传图片的大小，然后根据需求分多次调用MID_UPLOADIMAGE 来获取图片。MID_UPLOADIMAGE
+指令中携带的数据upload_image_offset[4]表示该次上传图片的偏移量（例如偏移量位0 时将从图片
+开头开始传输），upload_image_size[4]表示该次上传图片的大小，最大支持4000 字节。
+带彩色镜头的模组，把MID_GETSAVEDIMAGE 指令的图片编号(image_number)设置为0，获取现场
+图片，亮度充足的环境下，可以获取彩色图像，黑暗的情况下，获取红外图像。
+15.4 MID_GET_LOGFILE & MID_UPLOAD_LOGFILE
+获取人脸模组工作记录。
+也可以用到获取已注册的数据，发送到其他人脸模组进行注册，log_type 设置为2，获取已注册
+的用户数据后，通过OTA 功能把注册数据发送到其他模组进行注册。
+OTA 完成之后模组要自动重启，如果不愿意模组重启，不要用OTA 功能，使用
+MID_TRANS_FILE_PACKET 传输即可，注册完成后模组不重启。
+15.5 MID_SET_RELEASE_ENC_KEY
+主控在第一次开机时必须发送该命令，模块会对该指令携带的数据加密并保存，之后模块会用该
+数据进行[13 加密通信流程]中所描述的加密通信。该数据掉电不丢失。
+15.6 MID_INIT_ENCRYPTION
+主控下发随机数，模块在收到随机数后进行密码生成，并按照新密码发送一条reply 的消息。
+该结构体中除了随机数外，还包含加密mode，以及设置系统时间的crttime 数组，该数组存
+储的内容代表当前时区的秒数(1970 年至今)。
+主控下发随机数的结构体，如下：
+typedef struct {
+uint8_t seed[4];
+uint8_t mode;
+
+==== PAGE 31 ====
+https://www.xitu3d.com/
+31
+uint8_t crttime[4];
+} s_msg_init_encryption_data;
+模块加密完成后返回的数据结构体如下：
+typedef struct {
+uint8_t device_id[20];
+} s_msg_reply_init_encryption_data;
+15.7 MID_SET_INTERACTIVATE
+主控在开机后，下发交互录入时使用的各方向的角度范围阈值，若不调用该接口，则使用默认
+阈值进行注册。
+主控下发结构体如下：
+typedef struct {
+uint8_t range_left_min;
+uint8_t range_left_max;
+uint8_t range_right_min;
+uint8_t range_right_max;
+uint8_t range_up_min;
+uint8_t range_up_max;
+uint8_t range_down_min;
+uint8_t range_down_max;
+} s_msg_interactivate_param;
+15.8 MID_TRANS_FILE_PACKET
+用图片注册的第一步需要先下发人脸图片文件，接受文件数据的结构体如下：
+typedef struct {
+uint8_t store_type; // must be 0, store in memory
+uint8_t feat_size[4]; // transfer file size, int -> [s1 s2 s3 s4]
+uint8_t offset[4]; // transfer file offset
+uint8_t psize[2]; // packet size
+uint8_t data[0]; // data 0 start
+} s_msg_trans_file_data;
+填写结构体中对应的总文件大小（最大支持1MB 文件），本包相对于起始文件的偏移量，本包
+的大小（所有包大小相加应等于文件大小），数据，然后发送即可。
+所有文件数据发送完成后，需特别再发一次偏移量和包大小都为0 的数据，作为此文件发送结
+束的标志。
+举例：
+发送一个150KB 的文件到模组，单次发送80KB，发送过程如下：
+
+==== PAGE 32 ====
+https://www.xitu3d.com/
+32
+第一包：
+file_data(0, 150*1024, 0, 80*1024, data);
+第二包：
+file_data (0, 150*1024, 80*1024, 70*1024, data);
+表明数据传输完成的终止包：
+file_data (0, 150*1024, 0, 0, data)
+图片文件传输完成后，使用ID_ENROLL_FROM_IMAGE 命令进行注册。图片注册附带的data 如
+下:
+typedef struct {
+uint8_t admin; // the user will be set to admin
+uint8_t user_name[USER_NAME_SIZE];
+uint8_t img_type; // 0 for rgb, 1 for ir, other is invalid
+uint8_t timeout; // timeout, unit second default 10s
+} s_msg_enroll_from_img_data;
+[admin]指明该录入的人为管理员；[timeout]为录入过程中的超时时间（单位s），默认为10s，
+可以在发送录入命令时设置，超时时间用户可以随意设置，最大不超过255s；[img_type]表示
+图片的
+类型，0 为RGB 图片，1 为IR 图片，其他值无效。

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CaosBioGuard 项目评估审查报告</title>
+<style>
+  :root {
+    --bg: #fafbfc;
+    --ink: #18222d;
+    --ink-2: #45525f;
+    --ink-3: #6b7883;
+    --hairline: rgba(24, 48, 66, 0.14);
+    --hairline-soft: rgba(24, 48, 66, 0.08);
+    --accent: #17677d;
+    --danger: #a83236;
+    --mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
+    --sans: "Source Han Sans SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: auto; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 216px minmax(0, 1fr);
+    gap: 48px;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 56px 40px 96px;
+  }
+  /* ---------- TOC 侧栏 ---------- */
+  aside { position: sticky; top: 40px; align-self: start; }
+  .toc-label {
+    font-size: 11px; letter-spacing: 0.14em; color: var(--ink-3);
+    text-transform: uppercase; margin-bottom: 14px;
+  }
+  .toc { list-style: none; border-top: 1px solid var(--hairline); }
+  .toc li { border-bottom: 1px solid var(--hairline-soft); }
+  .toc a {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 8px 0; text-decoration: none; color: var(--ink-2); font-size: 13.5px;
+  }
+  .toc a .no { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+  .toc a:hover { color: var(--accent); }
+  /* ---------- 正文列 ---------- */
+  main { min-width: 0; }
+  .kicker {
+    font-size: 12px; letter-spacing: 0.18em; color: var(--accent);
+    text-transform: uppercase; font-weight: 550;
+  }
+  h1 {
+    font-size: 42px; line-height: 1.12; font-weight: 600;
+    letter-spacing: -0.02em; margin: 14px 0 10px;
+  }
+  .subtitle { font-size: 16px; color: var(--ink-2); max-width: 34em; }
+  .meta {
+    margin-top: 30px; border-top: 1px solid var(--hairline);
+  }
+  .meta-row {
+    display: flex; gap: 24px; padding: 9px 0;
+    border-bottom: 1px solid var(--hairline-soft); font-size: 13.5px;
+  }
+  .meta-row dt { flex: 0 0 84px; color: var(--ink-3); }
+  .meta-row dd { color: var(--ink-2); font-family: var(--mono); font-size: 12.5px; }
+  .verdict {
+    margin-top: 34px; border: 1px solid var(--hairline); padding: 20px 22px;
+  }
+  .verdict .v-label {
+    font-size: 11px; letter-spacing: 0.14em; color: var(--danger);
+    font-weight: 550; margin-bottom: 8px;
+  }
+  .verdict p { color: var(--ink); }
+  .verdict p + p { margin-top: 8px; color: var(--ink-2); font-size: 14px; }
+  /* ---------- 章节 ---------- */
+  section { margin-top: 72px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .sec-no { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  h2 { font-size: 25px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+  .sec-rule { border: 0; border-top: 1px solid var(--hairline); margin: 14px 0 26px; }
+  p.body { max-width: 72ch; color: var(--ink); }
+  p.body + p.body { margin-top: 10px; }
+  .note { font-size: 13px; color: var(--ink-3); max-width: 72ch; margin-top: 10px; }
+  code, .mono { font-family: var(--mono); font-size: 0.88em; color: var(--ink); background: rgba(24,48,66,0.05); padding: 1px 4px; }
+  .loc { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+  /* ---------- 统计行 ---------- */
+  .count-line {
+    margin: 22px 0 4px; padding: 14px 18px; border: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 13px; color: var(--ink-2);
+    display: flex; flex-wrap: wrap; gap: 8px 28px;
+  }
+  .count-line b { color: var(--ink); font-weight: 600; }
+  .count-line .p0c { color: var(--danger); }
+  /* ---------- 维度表 ---------- */
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th {
+    text-align: left; font-size: 11.5px; letter-spacing: 0.1em; color: var(--ink-3);
+    font-weight: 550; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--hairline);
+  }
+  td {
+    padding: 10px 12px 10px 0; border-bottom: 1px solid var(--hairline-soft);
+    font-size: 13.5px; color: var(--ink-2); vertical-align: top;
+  }
+  td.first { color: var(--ink); font-weight: 550; white-space: nowrap; }
+  td.mono-cell { font-family: var(--mono); font-size: 12px; }
+  .grade-strong { color: var(--accent); font-weight: 600; }
+  .grade-weak { color: var(--danger); font-weight: 600; }
+  .grade-mid { color: var(--ink); font-weight: 600; }
+  /* ---------- P0 发现块 ---------- */
+  .finding { border-top: 1px solid var(--hairline); padding: 22px 0 6px; margin-top: 18px; }
+  .finding:first-of-type { border-top: 0; margin-top: 6px; padding-top: 8px; }
+  .f-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .f-no { font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600; }
+  .f-title { font-size: 17px; font-weight: 600; color: var(--ink); }
+  .f-sev {
+    font-size: 11px; letter-spacing: 0.12em; color: var(--danger);
+    border: 1px solid rgba(168, 50, 54, 0.45); padding: 1px 8px; font-weight: 550;
+  }
+  .f-loc { margin-top: 8px; }
+  .finding p.body { margin-top: 10px; font-size: 14.5px; }
+  .f-fix { margin-top: 10px; font-size: 13.5px; color: var(--ink-2); max-width: 72ch; }
+  .f-fix b { color: var(--ink); font-weight: 550; }
+  .verified {
+    font-size: 11px; letter-spacing: 0.08em; color: var(--ink-3);
+    font-family: var(--mono); margin-left: auto;
+  }
+  /* ---------- P1 分组 ---------- */
+  h3 {
+    font-size: 16px; font-weight: 600; margin: 40px 0 4px;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  h3 .h3-no { font-family: var(--mono); font-size: 12px; color: var(--ink-3); font-weight: 400; }
+  .h3-rule { border: 0; border-top: 1px solid var(--hairline-soft); margin: 10px 0 4px; }
+  /* ---------- 亮点 ---------- */
+  ol.strengths { list-style: none; counter-reset: s; margin-top: 6px; }
+  ol.strengths li {
+    counter-increment: s; padding: 12px 0; border-bottom: 1px solid var(--hairline-soft);
+    display: flex; gap: 16px; color: var(--ink-2); font-size: 14px; max-width: 78ch;
+  }
+  ol.strengths li::before {
+    content: counter(s, decimal-leading-zero); font-family: var(--mono);
+    font-size: 12px; color: var(--accent); padding-top: 3px; flex: 0 0 22px;
+  }
+  ol.strengths li b { color: var(--ink); font-weight: 550; }
+  /* ---------- 路线图 ---------- */
+  .phase { margin-top: 30px; }
+  .phase-head { display: flex; align-items: baseline; gap: 14px; }
+  .phase-no { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: 0.08em; }
+  .phase-title { font-size: 16.5px; font-weight: 600; }
+  .phase-when { font-size: 12.5px; color: var(--ink-3); margin-left: auto; font-family: var(--mono); }
+  .phase ul { list-style: none; margin-top: 12px; border-top: 1px solid var(--hairline); }
+  .phase li {
+    padding: 10px 0; border-bottom: 1px solid var(--hairline-soft);
+    font-size: 14px; color: var(--ink-2); display: flex; gap: 12px; max-width: 82ch;
+  }
+  .phase li::before { content: "→"; color: var(--ink-3); font-family: var(--mono); flex: 0 0 14px; }
+  .phase li b { color: var(--ink); font-weight: 550; }
+  /* ---------- 方法 ---------- */
+  .conflict { margin-top: 18px; }
+  .conflict .c-title { font-size: 13.5px; font-weight: 550; color: var(--ink); margin-bottom: 4px; }
+  .conflict p { font-size: 13.5px; color: var(--ink-2); max-width: 78ch; }
+  ul.plain { list-style: none; margin-top: 10px; }
+  ul.plain li {
+    padding: 8px 0; border-bottom: 1px solid var(--hairline-soft);
+    font-size: 13.5px; color: var(--ink-2); display: flex; gap: 12px; max-width: 82ch;
+  }
+  ul.plain li::before { content: "—"; color: var(--ink-3); flex: 0 0 14px; }
+  .readonly-note {
+    margin-top: 30px; border: 1px solid var(--hairline); padding: 16px 20px;
+    font-size: 13.5px; color: var(--ink-2);
+  }
+  .readonly-note b { color: var(--ink); }
+  footer {
+    margin-top: 80px; border-top: 1px solid var(--hairline); padding-top: 14px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  @media (max-width: 1080px) {
+    .layout { grid-template-columns: 1fr; padding: 40px 22px 72px; }
+    aside { position: static; }
+    .toc { display: none; }
+    .toc-inline { display: block !important; }
+  }
+  .toc-inline { display: none; margin-top: 26px; }
+  .toc-inline .toc { border-top: 1px solid var(--hairline); }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="toc-label">Contents</div>
+    <ul class="toc">
+      <li><a href="#s1"><span class="no">01</span>执行摘要</a></li>
+      <li><a href="#s2"><span class="no">02</span>维度评价</a></li>
+      <li><a href="#s3"><span class="no">03</span>P0 致命发现</a></li>
+      <li><a href="#s4"><span class="no">04</span>P1 严重发现</a></li>
+      <li><a href="#s5"><span class="no">05</span>P2 / P3 发现</a></li>
+      <li><a href="#s6"><span class="no">06</span>值得保留的设计</a></li>
+      <li><a href="#s7"><span class="no">07</span>修复路线图</a></li>
+      <li><a href="#s8"><span class="no">08</span>审查方法与覆盖</a></li>
+    </ul>
+  </aside>
+  <main>
+    <!-- ============ 封面 ============ -->
+    <div class="kicker">评估审查报告 · 只读审查</div>
+    <h1>CaosBioGuard<br>项目评估审查报告</h1>
+    <p class="subtitle">多生物识别考勤与门禁系统 —— 代码质量、安全、合规与工程化全面审查</p>
+    <dl class="meta">
+      <div class="meta-row"><dt>审查日期</dt><dd>2026-11-19</dd></div>
+      <div class="meta-row"><dt>审查范围</dt><dd>约 80 个自有 Python 文件 + Web 模板 / PWA / 小程序 / 配置与文档（dify/ 为第三方引入，不在审查范围）</dd></div>
+      <div class="meta-row"><dt>审查方式</dt><dd>5 路并行只读子审查 + 主会话逐条复核关键证据</dd></div>
+      <div class="meta-row"><dt>源代码改动</dt><dd>无 —— 全程只读，本次任务唯一新增文件为本报告</dd></div>
+    </dl>
+    <div class="verdict">
+      <div class="v-label">总体结论</div>
+      <p>架构设计成熟度明显高于工程完成度。识别核心、云边同步与硬件抽象的抽象层和测试纪律都做得像样，但 Web 管理端的认证与门禁闭环存在 6 个 P0 级漏洞，活体检测存在 fail-open 缺陷 —— <b>不建议以当前状态投入生产门禁使用</b>。</p>
+      <p>好消息是：多数问题属于「鉴权未接线」「配置未外置」类收尾工作，sync.py 中现成的 HMAC 验签实现几乎可以直接复用，按第 07 节路线图分三阶段整改即可达到可上线状态。</p>
+    </div>
+    <!-- 移动端 TOC -->
+    <nav class="toc-inline">
+      <div class="toc-label">Contents</div>
+      <ul class="toc">
+        <li><a href="#s1"><span class="no">01</span>执行摘要</a></li>
+        <li><a href="#s2"><span class="no">02</span>维度评价</a></li>
+        <li><a href="#s3"><span class="no">03</span>P0 致命发现</a></li>
+        <li><a href="#s4"><span class="no">04</span>P1 严重发现</a></li>
+        <li><a href="#s5"><span class="no">05</span>P2 / P3 发现</a></li>
+        <li><a href="#s6"><span class="no">06</span>值得保留的设计</a></li>
+        <li><a href="#s7"><span class="no">07</span>修复路线图</a></li>
+        <li><a href="#s8"><span class="no">08</span>审查方法与覆盖</a></li>
+      </ul>
+    </nav>
+
+    <!-- ============ 01 执行摘要 ============ -->
+    <section id="s1">
+      <div class="sec-head"><span class="sec-no">01</span><h2>执行摘要</h2></div>
+      <hr class="sec-rule">
+      <p class="body">本次审查覆盖 <b>biometrics/ 识别核心、sideUI/ Kiosk 边缘端、web_admin/ Flask 管理端、hardware/ 硬件层、mobile/ 移动端、tests/ 测试、部署与仓库卫生、个人信息合规</b> 八个维度，共产出 <b>51 条</b>发现，全部附文件与行号级证据。</p>
+      <div class="count-line">
+        <span><b class="p0c">P0 致命</b> 6 条</span>
+        <span><b>P1 严重</b> 17 条</span>
+        <span><b>P2 一般</b> 18 条</span>
+        <span><b>P3 建议</b> 10 条</span>
+        <span>亲自复核 P0：6 / 6</span>
+      </div>
+      <p class="body">三条主线贯穿全部发现：</p>
+      <p class="body"><b>其一，Web 端「有客户端、无服务端」。</b> 边缘客户端同步时确实发送了 Bearer token（managers.py:2295），但服务端的 /api/face/sync* 全家、/api/agent/* 全部不做任何校验 —— 鉴权只写了一半。其中 push 端点还对匿名请求做 pickle 反序列化，构成无鉴权远程代码执行，是全项目最重的一条。</p>
+      <p class="body"><b>其二，门禁场景把「可用性」排在了「安全性」之前。</b> 活体检测异常时放行（fail-open）、无 PAD 模型时降级放行并抬分、Kiosk 录入页对现场任何人开放 —— 三个缺陷叠加后，一张打印照片加十秒钟操作就可能完成「注册 + 过闸」。</p>
+      <p class="body"><b>其三，最好的代码恰恰没被用上。</b> biometrics/sync.py 的 outbox + HMAC + 幂等键 + 退避实现质量很高，但全仓库只有测试在调用它；生产同步仍走 managers.py 里的直连 HTTP。把这一模块接入生产路径，可同时消解传输明文、无验签、断网丢数据三类问题。</p>
+    </section>
+
+    <!-- ============ 02 维度评价 ============ -->
+    <section id="s2">
+      <div class="sec-head"><span class="sec-no">02</span><h2>维度评价</h2></div>
+      <hr class="sec-rule">
+      <table>
+        <tr><th style="width:150px">维度</th><th style="width:90px">评级</th><th>依据（详见后文）</th></tr>
+        <tr><td class="first">架构设计</td><td class="grade-strong">强</td><td>9 模态统一契约、4 方法基类 + 注册即接入，存储 / 融合 / 同步 / UI 零侵入扩展；边缘三线程模型干净。</td></tr>
+        <tr><td class="first">识别核心质量</td><td class="grade-mid">中</td><td>引擎均为真实实现；但双后端验证恒败、融合因子可静默降级、阈值三处不一致等契约缺口需要收口。</td></tr>
+        <tr><td class="first">Web / 接入安全</td><td class="grade-weak">弱</td><td>6 个 P0 全部集中在 Web 面：会话密钥硬编码、同步端点无鉴权、pickle RCE、agent 执行面裸奔、移动端身份自报。</td></tr>
+        <tr><td class="first">门禁可靠性</td><td class="grade-weak">弱</td><td>活体 fail-open、PAD 永远缺席、录入无门控、重锁失败静默 —— 门禁最不该出错的环节恰好问题最密。</td></tr>
+        <tr><td class="first">测试与工程化</td><td class="grade-mid">中</td><td>已有测试质量高（注入、隔离、具体断言），但主应用与数据层 0 覆盖、CI 被删未提交、依赖零版本约束。</td></tr>
+        <tr><td class="first">合规（PIPL）</td><td class="grade-mid">中偏弱</td><td>架构方向正确（不可逆模板 + Fernet），但原图落盘上云、敏感字段混存、无同意流程，距《人脸识别技术应用安全管理办法》要求有实质差距。</td></tr>
+      </table>
+    </section>
+
+    <!-- ============ 03 P0 ============ -->
+    <section id="s3">
+      <div class="sec-head"><span class="sec-no">03</span><h2>P0 致命发现</h2></div>
+      <hr class="sec-rule">
+      <p class="body">以下 6 条均已由主会话直接读取源码逐条复核，非子审查转述。任何一条未修复前，系统都不应暴露在局域网之外，更不应接入真实门禁。</p>
+
+      <div class="finding">
+        <div class="f-head"><span class="f-no">P0-1</span><span class="f-title">Flask 会话密钥硬编码，登录可被完全绕过</span><span class="f-sev">致命</span><span class="verified">已复核 ✓</span></div>
+        <div class="f-loc"><span class="loc">web_admin/app.py:27</span></div>
+        <p class="body">源码原文：<code>app.secret_key = 'supersecretkey'&nbsp;&nbsp;# Change this in production</code>。密钥随 git 分发，任何拿到代码的人可离线伪造 <code>logged_in</code> 会话 cookie，直接以管理员身份访问整个管理端，密码体系形同虚设。</p>
+        <p class="f-fix"><b>修复：</b>secret_key 改为环境变量注入的随机值，启动时缺失即拒绝启动；上线时作废全部旧会话。</p>
+      </div>
+
+      <div class="finding">
+        <div class="f-head"><span class="f-no">P0-2</span><span class="f-title">同步端点簇完全无鉴权：任意注入、全量导出、删人、回显数据库密码</span><span class="f-sev">致命</span><span class="verified">已复核 ✓</span></div>
+        <div class="f-loc"><span class="loc">web_admin/app.py:1628（push）· 1761（all）· 253（sync_config）· DELETE 同步端点</span></div>
+        <p class="body">/api/face/sync/push 匿名即可写入 / 覆盖任意人脸记录（向人脸库注入任意人是门禁系统最直接的攻击面）；/api/face/sync/all 匿名返回全量人脸库 —— 姓名、特征向量、metadata（含身份证号、手机号字段）与人脸原图 base64，一个 GET 请求即整库拖走；/api/sync_config 直接回显 MySQL 连接配置（含 root 密码）。客户端侧 managers.py:2295 确实发送 Bearer token，但服务端从未校验 —— 防线只修了自家这一半。</p>
+        <p class="f-fix"><b>修复：</b>为上述端点统一加 token + HMAC 验签（biometrics/sync.py 已有现成实现），并按 device_id 白名单限制调用方。</p>
+      </div>
+
+      <div class="finding">
+        <div class="f-head"><span class="f-no">P0-3</span><span class="f-title">无鉴权端点内 pickle 反序列化 —— 匿名远程代码执行</span><span class="f-sev">致命</span><span class="verified">已复核 ✓</span></div>
+        <div class="f-loc"><span class="loc">web_admin/app.py:1662（位于 P0-2 的 push 端点内）</span></div>
+        <p class="body"><code>embedding = pickle.loads(base64.b64decode(embedding_b64))</code> —— 与 P0-2 叠加后，任何能访问该端口的人 POST 一个恶意 pickle payload 即可在服务器上执行任意代码。这是全项目风险最高的一条。</p>
+        <p class="f-fix"><b>修复：</b>改用 <code>np.frombuffer(base64.b64decode(...), dtype=np.float32)</code> 定长解析，彻底移除该路径上的 pickle。</p>
+      </div>
+
+      <div class="finding">
+        <div class="f-head"><span class="f-no">P0-4</span><span class="f-title">Agent 工具执行面无鉴权，匿名可改写数据库与存储配置</span><span class="f-sev">致命</span><span class="verified">已复核 ✓</span></div>
+        <div class="f-loc"><span class="loc">web_admin/app.py:262-264（认证白名单放行，注释自认「P2 再加 token 校验」）· agent_tools/tools.py:534 / 539 / 544 / 574</span></div>
+        <p class="body">/api/agent/* 在全局认证中间件中被显式放行（源码注释写明「绕过 session 认证」），其下 POST /api/agent/call 与全部按工具生成的端点匿名可执行。set_config 写工具可将 MySQL / S3 指向攻击者服务器，配合 get_config 等读工具间接窃取数据；读工具无任何门槛。</p>
+        <p class="f-fix"><b>修复：</b>该执行面面向编排平台调用，应强制 Bearer token（与 P0-2 统一验签层），并在公网模式下默认关闭。</p>
+      </div>
+
+      <div class="finding">
+        <div class="f-head"><span class="f-no">P0-5</span><span class="f-title">Kiosk 录入页无管理员门控 —— 现场自录人脸即可过闸</span><span class="f-sev">致命</span><span class="verified">已复核 ✓</span></div>
+        <div class="f-loc"><span class="loc">sideUI/kiosk/app.py:287-293（仅 index 4 需管理员）· 303（录入页信号）· 447（识别通过即 unlock）</span></div>
+        <p class="body">页面切换门控只拦管理页（index 4），注册页与多模态录入页对现场任何人开放。完整攻击链：走到 Kiosk 前 → 打开注册页 → 对准摄像头录一张自己的脸 → <code>add_face → refresh_gallery</code> → 立刻识别通过 → <code>hardware.unlock()</code> 开门。全程无需任何凭证，耗时以秒计。</p>
+        <p class="f-fix"><b>修复：</b>录入入口复用现成的 AdminLoginOverlay 门控；注册成功的脸不立即进入识别图库（或需管理员确认后生效）。</p>
+      </div>
+
+      <div class="finding">
+        <div class="f-head"><span class="f-no">P0-6</span><span class="f-title">config.ini 明文密钥簇（未进 git，但明文落盘且可被 P0-2 间接窃取）</span><span class="f-sev">致命</span><span class="verified">已复核 ✓</span></div>
+        <div class="f-loc"><span class="loc">config.ini [S3] / [MySQL] / [Security] / [WebAdmin] 各节</span></div>
+        <p class="body">R2 对象存储的 access_key 与 secret_key、MySQL root 密码、模板加密 encryptionkey、WebAdmin token 与 salt 全部明文写在 config.ini。git 层面已核实干净：未被跟踪（.gitignore「本地配置 / 隐私」节覆盖）、对全部历史做逐值检索 0 命中 —— 没有发生仓库泄漏。但明文密钥与密文同机同目录，且 docker compose 将其挂入容器；更关键的是 P0-2 的 sync_config 端点使这些密钥可被网络请求直接读取。</p>
+        <p class="f-fix"><b>修复：</b>全部密钥立即轮换并外置（环境变量 / 密钥文件 / KMS），config.ini 仅保留非敏感项；加密密钥与密文分离存储。</p>
+      </div>
+    </section>
+
+    <!-- ============ 04 P1 ============ -->
+    <section id="s4">
+      <div class="sec-head"><span class="sec-no">04</span><h2>P1 严重发现</h2></div>
+      <hr class="sec-rule">
+
+      <h3><span class="h3-no">4.1</span>门禁核心可靠性</h3>
+      <hr class="h3-rule">
+      <table>
+        <tr><th style="width:34%">问题</th><th style="width:30%">位置</th><th>要点与修复方向</th></tr>
+        <tr><td class="first">活体检测 fail-open</td><td class="mono-cell">biometrics/service.py:126-131</td><td>活体守卫捕获所有异常后返回 True 继续比对 —— 门禁场景下活体崩溃等于放行。改为按策略 fail-closed（异常即拒绝并告警）。</td></tr>
+        <tr><td class="first">无 PAD 模型时降级放行并伪造分数</td><td class="mono-cell">biometrics/liveness.py:357-373 · sideUI/kiosk/workers.py:167</td><td>Kiosk 永远以 <code>FaceLivenessDetector(None)</code> 运行（无 PAD 模型）且默认 degraded；此时启发式通过即放行、活体分数被抬至 ≥0.55 伪造审计记录 —— 打印照片 / 屏幕翻拍可开门。生产默认 strict，或真正接入 PAD 模型；降级放行必须落审计。</td></tr>
+        <tr><td class="first">双后端混合模板验证恒败</td><td class="mono-cell">biometrics/service.py:180 / 206 · hybrid.py:92</td><td>fusion 模板将 model 与 SDK 异构模板用同一 probe 比对，跨后端维度得分恒 0，<code>passed=all</code> 合并后验证必失败。按 probe 后端取同源模板参与比对。</td></tr>
+        <tr><td class="first">outbox / HMAC 同步未接线（承诺未生效）</td><td class="mono-cell">biometrics/sync.py（仅 tests/test_sync.py 引用）· managers.py:2176</td><td>模块本身质量高（幂等键、HMAC+时间戳防重放、退避+抖动、死信队列），但生产同步仍走 managers.py 直连 HTTP/MySQL；[Sync].secret 无任何消费方；/api/face/sync/meta|one 不在服务端白名单，边缘对账调用会被重定向到登录页。接入后台线程并下线直推。</td></tr>
+      </table>
+
+      <h3><span class="h3-no">4.2</span>Web 与接入安全</h3>
+      <hr class="h3-rule">
+      <table>
+        <tr><th style="width:34%">问题</th><th style="width:30%">位置</th><th>要点与修复方向</th></tr>
+        <tr><td class="first">移动端身份完全自报（IDOR）</td><td class="mono-cell">web_admin/mobile_api.py:59-61 / 70-71</td><td>带 <code>X-Mobile-Subject</code> 头或 subject 参数即被判定为 user，login 任意 subject 无校验放行，records / profile 按请求方自报 subject 检索 —— 可冒名查看任意工号的考勤与模板。改为服务端登录签发与凭证绑定的 subject。</td></tr>
+        <tr><td class="first">口令弱哈希 + 登录无限速</td><td class="mono-cell">web_admin/app.py:206 · generate_admin_token.py:9</td><td>口令 MD5 + 8 位 hex 盐，登录无失败限速。换 PBKDF2/argon2 并加失败限速。</td></tr>
+        <tr><td class="first">GET 写操作 + 全站无 CSRF</td><td class="mono-cell">web_admin/app.py:911 / 929</td><td>/faces/delete、toggle_admin 允许 GET 触发状态变更。改 POST-only 并补 CSRF token。</td></tr>
+        <tr><td class="first">Kiosk 管理口令明文存储、明文比对、无尝试限制</td><td class="mono-cell">sideUI/kiosk/app.py:105 / 110 · data.py:75-79</td><td>admin_pin 明文写入全局 config.ini，明文相等比对且无失败次数限制，可拖库 / 爆破进管理页。盐哈希存储 + 失败限速。</td></tr>
+      </table>
+
+      <h3><span class="h3-no">4.3</span>边缘与硬件可靠性</h3>
+      <hr class="h3-rule">
+      <table>
+        <tr><th style="width:34%">问题</th><th style="width:30%">位置</th><th>要点与修复方向</th></tr>
+        <tr><td class="first">串口继电器重锁失败静默 —— 门可能常开</td><td class="mono-cell">hardware/controllers.py:120-131</td><td>SerialRelay.close 由 threading.Timer 回调，重锁命令失败时异常被线程默认钩子吞掉：无重试、无告警、门保持常开。失败重试并经 event_callback 上报。</td></tr>
+      </table>
+
+      <h3><span class="h3-no">4.4</span>个人信息合规（PIPL / GB/T 35273）</h3>
+      <hr class="h3-rule">
+      <table>
+        <tr><th style="width:34%">问题</th><th style="width:30%">位置</th><th>要点与修复方向</th></tr>
+        <tr><td class="first">原始人脸图明文落盘并上传对象存储</td><td class="mono-cell">managers.py:586-589 / 828</td><td>注册原图以 MD5(姓名) 命名的明文 JPG 落盘并上传 R2。GB/T 35273-2020 §6.4c：原则上不应存储原始生物识别图像。注册完成即删原图，或加密 + 限期留存。</td></tr>
+        <tr><td class="first">身份证号 / 手机号与特征向量同表明文混存</td><td class="mono-cell">managers.py:538 / 772</td><td>faces.metadata 明文 JSON 与 embedding 同表。GB/T 35273 §6.4b 要求分开存储；PIPL §6 最小必要 —— 考勤门禁并不需要身份证号 / 邮箱。字段最小化 + 敏感字段独立加密。</td></tr>
+        <tr><td class="first">模板加密未落地，缺依赖即静默明文</td><td class="mono-cell">sideUI/kiosk/data.py:207 · biometrics/store.py:24-30 / 47 · managers.py:351-355</td><td>Kiosk 侧 BioTemplateStore 未传 config_manager，无密钥即原文落库；云端缺 cryptography 或无密钥时静默回退明文 pickle —— 与 store.py 文档「密钥取自 config.ini」不符。删除明文回退，无密钥拒绝写入。</td></tr>
+        <tr><td class="first">人脸注册无告知 / 单独同意流程，无 PIA</td><td class="mono-cell">web_admin/templates/faces.html</td><td>全文无 consent / 隐私字样。PIPL §17 / §29 / §55 与《人脸识别技术应用安全管理办法》（2025-06-01 施行）要求单独同意与个人信息保护影响评估。注册页加告知 + 单独同意，上线前完成 PIA。</td></tr>
+        <tr><td class="first">同步与部署默认明文 HTTP</td><td class="mono-cell">config.ini [WebAdmin] protocol=http · deployment.py:122 · managers.py:2413-2415 / 3196 / 3486</td><td>云边同步明文传输 embedding / 原图且无签名；deployment.py 仅公网模式强制 TLS，局域网模式同样承载生物识别数据。全链路 HTTPS 并启用签名通道。</td></tr>
+      </table>
+
+      <h3><span class="h3-no">4.5</span>工程卫生</h3>
+      <hr class="h3-rule">
+      <table>
+        <tr><th style="width:34%">问题</th><th style="width:30%">位置</th><th>要点与修复方向</th></tr>
+        <tr><td class="first">README 容器部署指引必然失败</td><td class="mono-cell">README.md:146-153</td><td>§6 引用的 deploy/docker.env、deploy/docker-compose.yml、deploy/deployment.md 均不存在，实际 compose 在根目录。按文档执行必然报错。修正指向并统一文件名。</td></tr>
+        <tr><td class="first">部署默认弱凭据 + MySQL 发布宿主机</td><td class="mono-cell">docker-compose.yml:7-10 / 19 · deploy/config.docker.ini.example</td><td>MySQL 弱默认口令且 3306 发布到宿主机；示例中 WebAdmin token、[Sync] secret 为非空默认值，[Kiosk] admin_pin 为 6 位顺序弱默认。强制环境注入 / 首次随机生成，3306 移除或绑 127.0.0.1。</td></tr>
+        <tr><td class="first">dify/ 第三方整目录引入零说明</td><td class="mono-cell">dify/（未跟踪目录）· dify/LICENSE</td><td>整个 LangGenius Dify 目录（近 4000 个 py 文件）被放入仓库而无任何说明；dify/LICENSE 为修改版 Apache-2.0（附加多租户 SaaS 与 LOGO 限制条款），与项目 LICENSE / NOTICE 无兼容性声明，iic/ 第三方模型也未入 NOTICE。入库分发前需决策（移出 / 子模块）并补第三方清单。</td></tr>
+      </table>
+    </section>
+
+    <!-- ============ 05 P2/P3 ============ -->
+    <section id="s5">
+      <div class="sec-head"><span class="sec-no">05</span><h2>P2 / P3 发现</h2></div>
+      <hr class="sec-rule">
+
+      <h3><span class="h3-no">5.1</span>P2 一般（18 条）</h3>
+      <hr class="h3-rule">
+      <table>
+        <tr><th style="width:36%">问题</th><th>位置与要点</th></tr>
+        <tr><td class="first">managers.py 巨石化</td><td class="mono-cell">managers.py（3639 行）—— 聚合配置、双 FaceStore、考勤 / 门禁 / 日志 / 通知 / 设备、MySQL 探测、两代同步共 6+ 类职责；按 config / facestore / records / sync 拆模块。</td></tr>
+        <tr><td class="first">system_logs 同步非幂等</td><td class="mono-cell">managers.py:2229 —— 裸 INSERT（考勤 / 门禁用 INSERT IGNORE），提交后崩溃重试即产生重复日志。</td></tr>
+        <tr><td class="first">开门事件先落库、unlock 无异常兜底</td><td class="mono-cell">sideUI/kiosk/app.py:441-449 —— SerialRelay 抛异常会跳过结果 UI 复位定时器，且 passed=1 已落库但门可能未开。</td></tr>
+        <tr><td class="first">图库热更新与推理线程竞态</td><td class="mono-cell">sideUI/kiosk/workers.py:169-171 / 206 —— UI 线程分两步替换 _names/_matrix，交错时新旧错配，图库顺序变化可致 1:N 认错人。成对快照读取。</td></tr>
+        <tr><td class="first">摄像头断流无自动重连</td><td class="mono-cell">sideUI/kiosk/workers.py:63-84 —— 一次性降级演示流后不重连，设备恢复需重启应用。</td></tr>
+        <tr><td class="first">硬件健康检查硬编码在线</td><td class="mono-cell">hardware/manager.py:123-131 —— health() 所有设备恒 online=True，串口掉线仍上报健康。</td></tr>
+        <tr><td class="first">每次注册重复加载识别模型</td><td class="mono-cell">sideUI/kiosk/app.py:373-375 · biometrics/engines/face.py:95 —— 每次 FaceEngine() 重新加载 buffalo_l，与识别线程双份模型共占边缘内存。复用推理进程的会话。</td></tr>
+        <tr><td class="first">厂商适配 command 模式不可用</td><td class="mono-cell">biometrics/adapters/generic.py:153 / 192 —— compare 只传模板 meta 不传数据，厂商子进程无从计算相似度。</td></tr>
+        <tr><td class="first">阈值体系不统一</td><td class="mono-cell">biometrics/service.py:157 · face.py:284 —— margin 阈值 0.04/0.05/0.06 三处不一致；质量自适应阈值仅在 match_gallery 生效，1:N 主路径未用。</td></tr>
+        <tr><td class="first">融合契约缺口</td><td class="mono-cell">biometrics/service.py:187 · fusion.py:89 —— 未注册模态静默降级因子数（「多因子」可退化为单因子）；sequential 未按 security_level 排序，与注释承诺不符。</td></tr>
+        <tr><td class="first">开发模式缺省暴露调试器</td><td class="mono-cell">web_admin/app.py:1920 —— 缺省 development 时 debug=True 绑 0.0.0.0。缺省改 production。</td></tr>
+        <tr><td class="first">密钥明文回显进设置页 HTML</td><td class="mono-cell">web_admin/templates/settings/storage.html:68 · database.html:30 —— R2 secret_key 与 MySQL 密码明文进 value。掩码回显。</td></tr>
+        <tr><td class="first">依赖零版本约束且文件间冲突</td><td class="mono-cell">requirements.txt:1-19 —— 19 个依赖无版本约束，onnxruntime 与 opencv 在主文件与子集文件间变体冲突，无 lock 文件。</td></tr>
+        <tr><td class="first">CI 与安全政策被删除且未提交</td><td class="mono-cell">.github/（5 文件工作区已删未提交）—— 仓库唯一 workflow（CLA）与 SECURITY.md 一并被删，从未有过测试 CI。恢复或明确提交删除，并新增 pytest CI。</td></tr>
+        <tr><td class="first">大体积二进制入库</td><td class="mono-cell">sideUI/models/_14_best.pth.tar（18MB）· mobilenet_v2.pth.tar（14MB）· iic/model.onnx（1.4MB）· logo.png（1.86MB，根目录与 web_admin/static 双份）—— 迁 Git LFS / 发布资产，logo 去重。</td></tr>
+        <tr><td class="first">outbox 载荷明文落盘且不清理</td><td class="mono-cell">biometrics/sync.py:106-116 —— 载荷含姓名 / 考勤时间，acked 后无清理。脱敏 + 确认后定期清除。</td></tr>
+        <tr><td class="first">考勤与注册日志无限期留存</td><td class="mono-cell">managers.py:2479-2481 · store.py:128-133 —— 仅支持手动全清，姓名级流水无限留存。按主体删除 + 自动保留期。</td></tr>
+        <tr><td class="first">敏感信息进控制台与前端提示</td><td class="mono-cell">web_admin/app.py:226-228 / 381 —— 初始密码明文打印、登录异常原文 flash 到前端。</td></tr>
+      </table>
+
+      <h3><span class="h3-no">5.2</span>P3 建议（10 条）</h3>
+      <hr class="h3-rule">
+      <table>
+        <tr><th style="width:36%">问题</th><th>位置与要点</th></tr>
+        <tr><td class="first">引擎构造失败静默吞掉</td><td class="mono-cell">biometrics/registry.py:32-34 —— 无日志无 problems 记录，模态缺失难排查。</td></tr>
+        <tr><td class="first">token 非常量时间比较 + 连接泄漏</td><td class="mono-cell">web_admin/biometric_api.py:49（== 应改 compare_digest）；store.py / sync.py 共 9 处 <code>with self._conn()</code> 只提交不关闭。</td></tr>
+        <tr><td class="first">推理线程关闭策略粗暴</td><td class="mono-cell">sideUI/kiosk/workers.py:160 —— (2,2,3) 哨兵帧 + shape 魔数唤醒；closeEvent terminate() 强杀可损 ONNX 会话。</td></tr>
+        <tr><td class="first">分块下载不校验实际字节数</td><td class="mono-cell">x2000/client.py capture_image —— 缺块时 offset 照常前进，图片静默损坏。</td></tr>
+        <tr><td class="first">.dockerignore 防御不足</td><td class="mono-cell">未排除 face_images/、picture/、docs/、tests/，<code>COPY . .</code> 全量进镜像（当前为空目录，属防御性）。</td></tr>
+        <tr><td class="first">web_admin/.env 跟踪策略冲突</td><td class="mono-cell">被 git 跟踪但 .gitignore 声明忽略（内容仅 FLASK_PORT，无泄密）。<code>git rm --cached</code> 统一。</td></tr>
+        <tr><td class="first">docs 白名单缺 6 份设计文档</td><td class="mono-cell">agent-integration、cloud-edge-face-store、notification-center、plugin-registry、registry-center、x2000 需求等设计文档被 .gitignore 白名单挡在库外。</td></tr>
+        <tr><td class="first">test/ 目录杂项且与 tests/ 混淆</td><td class="mono-cell">test/1.py + test/logs/（未跟踪，PySide6 视频抽帧草稿）与测试目录命名混淆，移出或删除。</td></tr>
+        <tr><td class="first">遗留入口无引用</td><td class="mono-cell">sideUI_unified*.py / face_core.py 为无引用的旧入口，决策去留。</td></tr>
+        <tr><td class="first">未跟踪杂项待决策</td><td class="mono-cell">_proto_dump.txt（X2000 协议 dump）、GIT_NOTES.md 未跟踪；X2000开发资料&amp;固件升级工具 目录去留未决策。</td></tr>
+      </table>
+    </section>
+
+    <!-- ============ 06 亮点 ============ -->
+    <section id="s6">
+      <div class="sec-head"><span class="sec-no">06</span><h2>值得保留的设计</h2></div>
+      <hr class="sec-rule">
+      <p class="body">以下不是客套 —— 它们是项目里真正做对的部分，整改时应保护而不是推倒。</p>
+      <ol class="strengths">
+        <li><b>9 模态统一契约是真的。</b> 4 方法基类 + ENGINE_CLASSES 注册即接入，存储 / 融合 / 同步 / UI 各端零改动扩展；engines 下均为真实实现（MFCC 声纹、Daugman 虹膜等），不是空壳抽象。</li>
+        <li><b>biometrics/sync.py 的 outbox 设计符合云边同步安全范式。</b> 幂等键、HMAC-SHA256 + 时间戳防重放（sync.py:34-43，compare_digest 校验）、指数退避 + 抖动、死信队列、可注入 transport —— 只差接入生产路径。</li>
+        <li><b>1:N 识别设计有安全意识。</b> margin 二名分差防撞脸、模板 digest 幂等键、质量择优覆盖、不可逆模板 + Fernet 加密的组合是正确方向。</li>
+        <li><b>已有测试可信。</b> transport 注入、tempfile 隔离、offscreen 运行，断言具体（重试调度、幂等去重、签名防篡改、409 边界）；biometrics / sync / hardware / deployment / 双 API / Kiosk 冒烟均有覆盖。</li>
+        <li><b>git 跟踪面干净。</b> 197 个跟踪文件中，密钥、数据库、人脸图片、构建产物、虚拟环境均未入库；对 5 个敏感值做全历史检索 0 命中。</li>
+        <li><b>许可套件齐全。</b> Apache-2.0 全文 + NOTICE（含商标条款）+ CLA + DISCLAIMER（含 GDPR / 个保法合规要求）。</li>
+        <li><b>边缘线程模型干净。</b> 推理队列 maxsize=1 丢帧保低延迟，采集 / 推理 / 演示三线程独立，关窗统一 stop + wait + terminate 兜底，头部约束注释明确。</li>
+        <li><b>若干细节做得到位。</b> Wiegand26 奇偶校验编码正确；x2000 传输层帧头自动重同步 + XOR 校验 + 统一 deadline 超时；agent 工具层 get_config 对 password / secret / token / salt 统一脱敏后再输出；人脸上传 cv2.imdecode 校验且不按原始文件名落盘。</li>
+      </ol>
+    </section>
+
+    <!-- ============ 07 路线图 ============ -->
+    <section id="s7">
+      <div class="sec-head"><span class="sec-no">07</span><h2>修复路线图</h2></div>
+      <hr class="sec-rule">
+      <div class="phase">
+        <div class="phase-head"><span class="phase-no">PHASE 1</span><span class="phase-title">上线阻断项</span><span class="phase-when">立即 · 以天计</span></div>
+        <ul>
+          <li><b>轮换全部密钥</b>：config.ini 中 R2、MySQL、encryptionkey、token、salt 全部作废重发，并外置存储（环境变量 / KMS）。</li>
+          <li><b>消灭硬编码会话密钥</b>：app.py:27 secret_key 环境变量注入，作废旧会话。</li>
+          <li><b>统一鉴权层</b>：/api/face/sync*、/api/agent/*、/api/sync_config 全部接入 token + HMAC 验签（复用 sync.py:34-43 现成实现）+ 设备白名单。</li>
+          <li><b>移除 pickle 反序列化</b>：app.py:1662 改 np.frombuffer 定长解析。</li>
+          <li><b>Kiosk 录入门控</b>：录入入口接 AdminLoginOverlay，注册结果需管理员确认后生效。</li>
+          <li><b>活体 fail-closed</b>：service.py:126-131 异常即拒绝；生产禁 degraded 降级放行。</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><span class="phase-no">PHASE 2</span><span class="phase-title">安全与合规加固</span><span class="phase-when">1–2 周</span></div>
+        <ul>
+          <li><b>移动端身份重构</b>：登录签发服务端凭证，废除 X-Mobile-Subject 自报身份。</li>
+          <li><b>口令与 CSRF</b>：PBKDF2 + 登录失败限速；写操作 POST-only + CSRF token；Kiosk admin_pin 盐哈希存储。</li>
+          <li><b>传输加密</b>：全链路 HTTPS（含局域网同步链路），MySQL 不再发布 3306。</li>
+          <li><b>同步接线</b>：outbox + HMAC 后台线程接入生产，下线 managers.py 直推，[Sync].secret 落地消费。</li>
+          <li><b>数据合规</b>：注册页告知 + 单独同意；原图限期删除或不再落盘；身份证号等敏感字段最小化并独立加密；模板加密在边缘侧真正启用。</li>
+          <li><b>门禁兜底</b>：SerialRelay 重锁失败重试 + 告警；图库热更新竞态修复；硬件 health 反映真实状态。</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="phase-head"><span class="phase-no">PHASE 3</span><span class="phase-title">工程化与可维护性</span><span class="phase-when">持续</span></div>
+        <ul>
+          <li><b>拆分 managers.py</b>：按 config / facestore / records / sync 拆模块，消除 3639 行巨石。</li>
+          <li><b>依赖治理</b>：收敛 requirements 文件族，加 lock 文件与版本约束。</li>
+          <li><b>恢复 CI</b>：提交 .github 决策，新增 pytest 工作流；为 web_admin 主应用与 managers.py 数据层补测试。</li>
+          <li><b>仓库卫生</b>：二进制迁 LFS、logo 去重、docs 白名单补齐、test/ 杂项清理、README §6 修正。</li>
+          <li><b>dify/ 决策</b>：移出仓库或改子模块，补第三方组件清单与许可兼容性说明（含 iic/ 模型）。</li>
+          <li><b>数据生命周期</b>：考勤 / 注册日志自动保留期与按主体删除。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ 08 方法 ============ -->
+    <section id="s8">
+      <div class="sec-head"><span class="sec-no">08</span><h2>审查方法与覆盖</h2></div>
+      <hr class="sec-rule">
+      <p class="body">本报告由 <b>5 路并行只读子审查</b>（识别核心架构、Web 安全、边缘与硬件、测试与部署、个人信息合规）产出，再由主会话对 <b>全部 6 条 P0 与 2 处子审查结论冲突逐条复核</b> —— P0 各条的源码原文、认证中间件白名单、.gitignore 覆盖范围均经主会话直接读取验证，非子审查转述。</p>
+      <div class="conflict">
+        <div class="c-title">子审查结论冲突裁决（2 处）</div>
+        <p>① 「全项目无 HMAC 实现」与「sync.py 质量高含 HMAC」冲突 —— 经复核，<b>HMAC 已实现</b>（sync.py:17-43），但确无生产调用方；准确表述为「已实现、未接线」。</p>
+        <p>② 「config.ini 含明文密钥」与「无真实密钥泄漏」表述冲突 —— 经复核，<b>明文密钥在磁盘上存在</b>（P0-6），但未被 git 跟踪、全历史检索 0 命中；泄漏发生在「本地明文落盘 + 接口可读」层面，而非代码仓库层面。</p>
+      </div>
+      <ul class="plain">
+        <li>未运行 pytest / 构建 / 容器（只读约束）；识别精度与真机行为（摄像头、串口继电器、x2000 模组）未验证。</li>
+        <li>managers.py（3639 行）按模式抽查 SQL / 密钥 / 同步段，未逐行通读。</li>
+        <li>31 个 Web 模板抽查 2 个设置页；7 个模态引擎未全文通读；ui_kit 两文件未深审；x2000 协议字段未逐位核对。</li>
+        <li>dify/（第三方 vendored 目录，近 4000 个 py 文件）不在审查范围，仅在仓库卫生与许可维度涉及。</li>
+        <li>records.db 实际存量数据未读取（二进制 + 只读约束）；若库为空则泄露面减小，但机制性风险不变。</li>
+      </ul>
+      <div class="readonly-note"><b>只读声明：</b>本次审查全程未改动任何源代码、配置或文档；执行只读命令（读取、检索、git status / log / ls-files）与子审查调度外，唯一新增文件即本报告本身。</div>
+      <footer>
+        <span>CaosBioGuard 项目评估审查报告</span>
+        <span>2026-11-19 · 51 findings · P0 6 / P1 17 / P2 18 / P3 10</span>
+      </footer>
+    </section>
+  </main>
+</div>
+</body>
+</html>

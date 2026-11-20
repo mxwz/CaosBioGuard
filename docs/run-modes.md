@@ -10,13 +10,13 @@
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements-edge.txt
+pip install -r requirements/requirements-edge.txt
 ```
 
 Web 后台额外依赖：
 
 ```powershell
-pip install -r requirements-web.txt
+pip install -r requirements/requirements-web.txt
 ```
 
 验证：
@@ -32,7 +32,7 @@ python deployment.py
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements-edge.txt
+pip install -r requirements/requirements-edge.txt
 python -m pytest -q
 python deployment.py
 ```
@@ -230,7 +230,7 @@ docker compose --env-file deploy/docker.env -f deploy/docker-compose.yml up -d
 ### 5.1 构建 exe
 
 ```powershell
-pip install -r requirements-edge.txt -r requirements-build.txt
+pip install -r requirements/requirements-edge.txt -r requirements/requirements-build.txt
 .\packaging\build_windows.ps1 -Clean
 ```
 

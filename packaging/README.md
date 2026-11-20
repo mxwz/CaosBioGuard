@@ -3,7 +3,7 @@
 ## Windows（Kiosk）
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-edge.txt -r requirements-build.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements/requirements-edge.txt -r requirements/requirements-build.txt
 .\packaging\build_windows.ps1 -Clean
 ```
 
@@ -37,7 +37,7 @@
 ## Linux / 树莓派
 
 ```bash
-python3 -m pip install -r requirements-edge.txt -r requirements-build.txt
+python3 -m pip install -r requirements/requirements-edge.txt -r requirements/requirements-build.txt
 bash packaging/build_linux.sh
 ```
 

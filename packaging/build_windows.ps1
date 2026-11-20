@@ -8,12 +8,12 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 if (-not (Test-Path $Python)) {
-    throw "未找到 Python: $Python；请先创建 .venv 并安装 requirements-edge.txt + requirements-build.txt"
+    throw "未找到 Python: $Python；请先创建 .venv 并安装 requirements/requirements-edge.txt + requirements/requirements-build.txt"
 }
 
 & $Python -c "import PyInstaller" 2>$null
 if ($LASTEXITCODE -ne 0) {
-    throw "缺少 PyInstaller，请执行: $Python -m pip install -r requirements-build.txt"
+    throw "缺少 PyInstaller，请执行: $Python -m pip install -r requirements/requirements-build.txt"
 }
 
 $args = @("-m", "PyInstaller", "packaging\edge_kiosk.spec", "--noconfirm")

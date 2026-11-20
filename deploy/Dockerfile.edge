@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender1 libsm6 libfontconfig1 libdbus-1-3 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-edge.txt .
-RUN pip install --no-cache-dir -r requirements-edge.txt
+COPY requirements/requirements-edge.txt requirements/requirements-edge.txt
+RUN pip install --no-cache-dir -r requirements/requirements-edge.txt
 
 COPY . .
 RUN mkdir -p sideUI/dd sideUI/face_images

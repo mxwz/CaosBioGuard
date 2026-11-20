@@ -22,5 +22,6 @@ dify
 test
 x2000
 X2000开发资料&固件升级工具
-_proto_dump.txt
-GIT_NOTES.md
+docs/x2000-protocol-dump.txt
+docs/git-notes.md
+docs/CaosBioGuard-评估审查报告.html

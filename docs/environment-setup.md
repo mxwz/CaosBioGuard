@@ -34,7 +34,7 @@ cd C:\Users\18229\Documents\work\py\CaosBioGuard
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+pip install -r requirements/requirements.txt
 ```
 
 如果 PowerShell 阻止激活脚本，可执行：
@@ -51,7 +51,7 @@ cd /path/to/CaosBioGuard
 python3.13 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+pip install -r requirements/requirements.txt
 ```
 
 ## 3. 密钥与敏感配置

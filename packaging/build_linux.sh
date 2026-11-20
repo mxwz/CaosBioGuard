@@ -6,7 +6,7 @@ cd "$ROOT"
 
 PY="${PYTHON:-python3}"
 if ! "$PY" -c "import PyInstaller" >/dev/null 2>&1; then
-  echo "缺少 PyInstaller：$PY -m pip install -r requirements-build.txt" >&2
+  echo "缺少 PyInstaller：$PY -m pip install -r requirements/requirements-build.txt" >&2
   exit 1
 fi
 

@@ -47,7 +47,7 @@ CaosBioGuard 是面向工厂、园区、社区、实验室和小型办公场景�
 ### 4.1 首次启动
 
 1. 重建或激活虚拟环境：`python -m venv .venv`。
-2. 安装依赖：`pip install -r requirements-edge.txt`。
+2. 安装依赖：`pip install -r requirements/requirements-edge.txt`。
 3. 确认 `buffalo_l` 模型位于本地模型目录，避免启动时联网下载。
 4. 复制配置模板并按场景选择 `[Deployment]` 参数。
 5. 无硬件时保持 `[Hardware] mode=simulator`。
