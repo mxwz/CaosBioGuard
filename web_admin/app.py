@@ -22,6 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from managers import SyncDatabaseManager, ConfigManager, DatabaseLogHandler, LocalFaceStore, CloudFaceStore, FaceStoreRegistry, auto_migrate_local_faces_to_cloud, migrate_cloud_faces_to_local, check_cloud_mode_switch
 from agent_tools.tools import agent_bp, init_agent_tools, build_tool_registry
 from agent_tools.mcp import mcp_bp
+from agent_tools import build_agent_system, create_agent_v2_blueprint
 from notify import init_notify_center, get_notify_center, Event
 from registry import init_registry_center, get_registry_center
 from biometrics import BioTemplate, CaptureRepository
@@ -114,7 +115,12 @@ init_registry_center()
 _registry_center = get_registry_center()
 _registry_center.register(_notify_registry)
 _registry_center.register(FaceStoreRegistry(config_manager, SQLITE_PATH, FACE_IMAGES_DIR, DB_PATH))
-_registry_center.register(build_tool_registry())
+_tool_registry = build_tool_registry()
+_registry_center.register(_tool_registry)
+
+# 分层 Agent 系统（主/子 × 前台/后台），复用同一工具注册器并暴露 v2 HTTP 接口
+_agent_system = build_agent_system(_tool_registry)
+app.register_blueprint(create_agent_v2_blueprint(_agent_system))
 # LS showed config.ini in arcface root AND sideUI/config.ini?
 # LS showed:
 # arcface/config.ini
