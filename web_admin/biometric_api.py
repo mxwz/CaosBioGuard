@@ -20,9 +20,10 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, Response, jsonify, request, session
 
 from biometrics import (BioSample, BioTemplateStore, BiometricService,
+                        CaptureRepository, ConsentRepository,
                         build_biometric_registry)
 from biometrics.engines.audio_utils import read_wav
 
@@ -33,6 +34,10 @@ def create_biometric_blueprint(config_manager, base_dir: str, url_prefix: str = 
     bp = Blueprint('biometric_api', __name__, url_prefix=url_prefix)
     base = Path(base_dir)
     store = BioTemplateStore(str(base / 'dd' / 'biometrics.db'), config_manager=config_manager)
+    capture_repo = CaptureRepository(
+        str(base / 'dd' / 'capture_versions.db'), config_manager=config_manager
+    )
+    consent_repo = ConsentRepository(str(base / 'dd' / 'consent_records.db'))
     registry = build_biometric_registry(config_manager=config_manager)
     service = BiometricService(registry, store, config_manager=config_manager)
 
@@ -161,6 +166,33 @@ def create_biometric_blueprint(config_manager, base_dir: str, url_prefix: str = 
             return data
         return {k: v for k, v in request.form.items()}
 
+    def _raw_source_bytes(payload: Dict[str, Any]) -> Optional[bytes]:
+        f = request.files.get('file')
+        if f is not None and f.filename:
+            f.seek(0)
+            return f.read()
+        for key in ('image_base64', 'image', 'audio_base64', 'audio'):
+            value = payload.get(key)
+            if value:
+                if isinstance(value, str) and ',' in value and value.strip().startswith('data:'):
+                    value = value.split(',', 1)[1]
+                return base64.b64decode(value)
+        if payload.get('strokes'):
+            return json.dumps(payload['strokes'], ensure_ascii=False).encode('utf-8')
+        return None
+
+    def _source_mime(payload: Dict[str, Any], modality: str) -> str:
+        f = request.files.get('file')
+        if f is not None and f.mimetype:
+            return f.mimetype
+        if modality == 'voiceprint':
+            return 'audio/wav'
+        if modality == 'gait':
+            return 'video/mp4'
+        if modality == 'signature':
+            return 'application/json'
+        return 'image/jpeg'
+
     @bp.get('/health')
     def health():
         guard = _guard()
@@ -194,6 +226,119 @@ def create_biometric_blueprint(config_manager, base_dir: str, url_prefix: str = 
         return jsonify({'status': 'ok', 'data': [
             {'subject': n, 'modalities': store.modalities_of(n)} for n in names
         ]})
+
+    @bp.get('/captures/versions')
+    def capture_versions():
+        guard = _guard()
+        if guard:
+            return guard
+        subject = str(request.args.get('subject') or '').strip()
+        modality = str(request.args.get('modality') or '').strip()
+        device_id = str(request.args.get('device_id') or 'WEB')
+        if not subject or not modality:
+            return _err('subject 和 modality 必填')
+        return jsonify({'status': 'ok', 'data': [
+            item.to_dict() for item in capture_repo.list_versions(subject, modality, device_id)
+        ]})
+
+    @bp.get('/captures/image')
+    def capture_image():
+        guard = _guard()
+        if guard:
+            return guard
+        subject = str(request.args.get('subject') or '').strip()
+        modality = str(request.args.get('modality') or '').strip()
+        device_id = str(request.args.get('device_id') or 'WEB')
+        version = request.args.get('version')
+        if not subject or not modality:
+            return _err('subject 和 modality 必填')
+        item = (
+            capture_repo.get_version(subject, modality, device_id, int(version))
+            if version is not None else capture_repo.active_version(subject, modality, device_id)
+        )
+        if item is None:
+            return _err('采集版本不存在', 404)
+        return Response(item.image_bytes, mimetype=item.image_mime)
+
+    @bp.post('/captures/rollback')
+    def capture_rollback():
+        guard = _guard()
+        if guard:
+            return guard
+        payload = _payload()
+        subject = str(payload.get('subject') or '').strip()
+        modality = str(payload.get('modality') or '').strip()
+        device_id = str(payload.get('device_id') or 'WEB')
+        if not subject or not modality:
+            return _err('subject 和 modality 必填')
+        try:
+            item = capture_repo.rollback(subject, modality, device_id)
+        except ValueError as exc:
+            return _err(str(exc), 409)
+        return jsonify({'status': 'ok', 'data': item.to_dict()})
+
+    @bp.get('/consent/latest')
+    def consent_latest():
+        guard = _guard()
+        if guard:
+            return guard
+        subject = str(request.args.get('subject') or '').strip()
+        modality = str(request.args.get('modality') or '').strip()
+        device_id = str(request.args.get('device_id') or 'WEB')
+        if not subject or not modality:
+            return _err('subject 和 modality 必填')
+        item = consent_repo.latest(subject, modality, device_id)
+        if item is None:
+            return _err('同意记录不存在', 404)
+        return jsonify({'status': 'ok', 'data': item.to_dict()})
+
+    @bp.get('/consent/list')
+    def consent_list():
+        guard = _guard()
+        if guard:
+            return guard
+        subject = str(request.args.get('subject') or '').strip()
+        if not subject:
+            return _err('subject 必填')
+        device_id = str(request.args.get('device_id') or '')
+        return jsonify({'status': 'ok', 'data': [
+            item.to_dict() for item in consent_repo.list_for(subject, device_id or None)
+        ]})
+
+    def _write_consent(withdraw_record: bool):
+        guard = _guard()
+        if guard:
+            return guard
+        payload = _payload()
+        subject = str(payload.get('subject') or '').strip()
+        modality = str(payload.get('modality') or '').strip()
+        consent_version = str(payload.get('consent_version') or '').strip()
+        consent_hash = str(payload.get('consent_hash') or '').strip()
+        device_id = str(payload.get('device_id') or 'WEB')
+        storage_location = str(payload.get('storage_location') or 'local-encrypted')
+        if not all([subject, modality, consent_version, consent_hash]):
+            return _err('subject、modality、consent_version、consent_hash 必填')
+        if withdraw_record:
+            item = consent_repo.withdraw(
+                subject, modality, consent_version, consent_hash,
+                device_id=device_id, storage_location=storage_location,
+                source_ip=request.remote_addr or ''
+            )
+        else:
+            item = consent_repo.grant(
+                subject, modality, consent_version, consent_hash,
+                device_id=device_id, storage_location=storage_location,
+                source_ip=request.remote_addr or ''
+            )
+        return jsonify({'status': 'ok', 'data': item.to_dict()})
+
+    @bp.post('/consent/grant')
+    def consent_grant():
+        return _write_consent(False)
+
+    @bp.post('/consent/withdraw')
+    def consent_withdraw():
+        return _write_consent(True)
 
     @bp.delete('/subjects/<path:subject>')
     def delete_subject(subject: str):
@@ -254,6 +399,22 @@ def create_biometric_blueprint(config_manager, base_dir: str, url_prefix: str = 
                                     use_liveness=False)
         except Exception as exc:
             return _err(f'注册失败: {exc}', 500)
+        if result.ok:
+            entry = store.get_entry(subject, modality, device_id)
+            if entry is None:
+                return _err('模板已处理但读取入库模板失败', 500)
+            raw_source = _raw_source_bytes(payload)
+            if raw_source is None:
+                return _err('原始采集样本缺失，拒绝完成注册', 400)
+            try:
+                capture = capture_repo.save_capture(
+                    subject, modality, raw_source, entry.template,
+                    device_id=device_id, image_mime=_source_mime(payload, modality),
+                    meta={'source': 'web_biometric_api'},
+                )
+            except Exception as exc:
+                return _err(f'原始样本加密保存失败: {exc}', 500)
+            result.detail['capture'] = capture.to_dict()
         code = 200 if result.ok else 422
         return jsonify({'status': 'ok' if result.ok else 'error', 'data': result.to_dict()}), code
 

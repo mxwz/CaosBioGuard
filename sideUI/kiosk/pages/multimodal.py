@@ -58,6 +58,7 @@ class MultimodalPage(QWidget):
         self.repo = repo
         self.registry = build_biometric_registry(config_manager=config)
         self.store = getattr(repo, 'bio_store', None)
+        self.capture_repo = getattr(repo, 'capture_repo', None)
         self.service = BiometricService(self.registry, self.store, config_manager=config) if self.store else None
         self._current: Optional[str] = None
         self._frame: Optional[np.ndarray] = None
@@ -327,6 +328,50 @@ class MultimodalPage(QWidget):
         self.message.emit(text, 'danger')
         self._update_buttons()
 
+    def _serialize_sample(self, sample: BioSample, modality: str) -> tuple[bytes, str, str]:
+        import io
+        import json
+        import wave
+        if sample.kind == 'image':
+            ok, buffer = cv2.imencode('.jpg', sample.data, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+            if not ok:
+                raise RuntimeError('原始图片编码失败')
+            return buffer.tobytes(), 'image/jpeg', '.jpg'
+        if sample.kind == 'audio':
+            waveform, sr = sample.data
+            pcm = np.clip(np.asarray(waveform, dtype=np.float32), -1, 1)
+            pcm = (pcm * 32767).astype('<i2')
+            fh = io.BytesIO()
+            with wave.open(fh, 'wb') as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(int(sr))
+                wf.writeframes(pcm.tobytes())
+            return fh.getvalue(), 'audio/wav', '.wav'
+        if sample.kind == 'frames':
+            fh = io.BytesIO()
+            np.savez(fh, *np.asarray(list(sample.data), dtype=np.uint8))
+            return fh.getvalue(), 'application/x-npz', '.npz'
+        if sample.kind == 'strokes':
+            payload = json.dumps(sample.data, ensure_ascii=False, default=lambda x: x.tolist() if hasattr(x, 'tolist') else str(x))
+            return payload.encode('utf-8'), 'application/json', '.json'
+        fh = io.BytesIO()
+        np.save(fh, np.asarray(sample.data))
+        return fh.getvalue(), 'application/octet-stream', '.bin'
+
+    def _serialize_samples(self, samples: List[BioSample], modality: str) -> tuple[bytes, str]:
+        if len(samples) == 1:
+            blob, mime, _ = self._serialize_sample(samples[0], modality)
+            return blob, mime
+        import io
+        import zipfile
+        fh = io.BytesIO()
+        with zipfile.ZipFile(fh, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for idx, sample in enumerate(samples, start=1):
+                blob, _, ext = self._serialize_sample(sample, modality)
+                zf.writestr(f'{modality}_{idx}{ext}', blob)
+        return fh.getvalue(), 'application/zip'
+
     def _enroll(self) -> None:
         if not self.service:
             self.message.emit('模板库不可用', 'danger')
@@ -343,8 +388,20 @@ class MultimodalPage(QWidget):
         samples = list(self._queue)
 
         def job():
-            return self.service.enroll(subject, modality, samples, device_id=device_id,
-                                       min_samples=1, min_quality=0.45, use_liveness=False)
+            result = self.service.enroll(subject, modality, samples, device_id=device_id,
+                                         min_samples=1, min_quality=0.45, use_liveness=False)
+            if not result.ok:
+                return result
+            if self.capture_repo is None:
+                raise RuntimeError('采集版本仓库不可用，拒绝只写模板不保存原始样本')
+            raw_bytes, mime = self._serialize_samples(samples, modality)
+            template = self.store.load(subject, modality, device_id) or self.registry.resolve(modality).extract(samples[0])
+            self.capture_repo.save_capture(
+                subject, modality, raw_bytes, template,
+                device_id=device_id, image_mime=mime,
+                meta={'source': 'kiosk_multimodal', 'samples': len(samples)},
+            )
+            return result
 
         def done(result):
             self.busy.stop()

@@ -23,6 +23,7 @@ dist/
 # ===== 本地配置 / 隐私 =====
 config.ini
 config.local.ini
+.env
 web_admin/.env
 *.db-journal
 *.sqlite-journal
@@ -49,3 +50,8 @@ docs/*
 !docs/application-guide.md
 !docs/vendor-sdk-backends.md
 !docs/run-modes.md
+!docs/environment-setup.md
+!docs/capture-versioning.md
+!docs/consent-and-pia.md
+!docs/baidu-face-sdk-integration.md
+!docs/hardware-apk-deployment.md

@@ -16,7 +16,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from biometrics import BioTemplateStore
+from biometrics import BioTemplate, BioTemplateStore, CaptureRepository
 
 ROOT = Path(__file__).resolve().parents[2]
 DD_DIR = ROOT / 'dd'
@@ -83,9 +83,10 @@ class KioskConfig:
 
     def get_encryption_key(self) -> str:
         with self._lock:
-            if self._parser.has_option('Security', 'encryptionkey'):
-                return self._parser.get('Security', 'encryptionkey')
-            return self._parser.get('Security', 'EncryptionKey', fallback='')
+            return (os.environ.get('CAOS_ENCRYPTION_KEY')
+                    or (self._parser.get('Security', 'encryptionkey')
+                        if self._parser.has_option('Security', 'encryptionkey') else '')
+                    or self._parser.get('Security', 'EncryptionKey', fallback=''))
 
     def set(self, section: str, key: str, value: Any) -> None:
         with self._lock:
@@ -206,17 +207,18 @@ class SubjectRepository:
         if not self.face_db_path.is_absolute():
             self.face_db_path = ROOT / self.face_db_path
         self._lock = threading.RLock()
-        self._faces: Dict[str, np.ndarray] = self._load_faces()
         self.images_dir = self.face_db_path.parent / 'face_images'
         self.images_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            self.bio_store = BioTemplateStore(
-                str(DD_DIR / 'biometrics.db'), config_manager=self.config
-            )
-        except Exception:
-            self.bio_store = None
+        self.bio_store = BioTemplateStore(
+            str(DD_DIR / 'biometrics.db'), config_manager=self.config
+        )
+        self._migrate_legacy_face_pkl()
+        self._faces: Dict[str, np.ndarray] = self._load_faces()
+        self.capture_repo = CaptureRepository(
+            str(DD_DIR / 'capture_versions.db'), config_manager=self.config
+        )
 
-    def _load_faces(self) -> Dict[str, np.ndarray]:
+    def _load_legacy_pkl(self) -> Dict[str, np.ndarray]:
         if not self.face_db_path.exists():
             return {}
         try:
@@ -226,10 +228,36 @@ class SubjectRepository:
         except Exception:
             return {}
 
+    def _migrate_legacy_face_pkl(self) -> None:
+        try:
+            if self.bio_store.subjects('face'):
+                return
+        except Exception:
+            return
+        legacy = self._load_legacy_pkl()
+        for name, embedding in legacy.items():
+            template = BioTemplate(
+                'face',
+                arrays={'embedding': np.asarray(embedding, dtype=np.float32)},
+                quality=0.7,
+                meta={'source': 'legacy-pkl-migration'},
+            )
+            self.bio_store.save(name, template, device_id='legacy')
+
+    def _load_faces(self) -> Dict[str, np.ndarray]:
+        faces: Dict[str, np.ndarray] = {}
+        try:
+            for name, template in self.bio_store.gallery('face'):
+                embedding = template.arrays.get('embedding')
+                if embedding is not None:
+                    faces[str(name)] = np.asarray(embedding, dtype=np.float32)
+        except Exception:
+            pass
+        return faces
+
     def _persist(self) -> None:
-        self.face_db_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.face_db_path, 'wb') as f:
-            pickle.dump(self._faces, f)
+        # 人脸模板以加密 BioTemplateStore 为权威库，不再写入明文 pkl。
+        return None
 
     def names(self) -> List[str]:
         with self._lock:
@@ -254,12 +282,31 @@ class SubjectRepository:
             mat = np.stack([self._faces[n] for n in names]).astype(np.float32)
         return names, mat
 
-    def add_face(self, name: str, embedding: np.ndarray, image: Optional[np.ndarray] = None) -> None:
+    def add_face(self, name: str, embedding: np.ndarray, image: Optional[np.ndarray] = None,
+                 quality: float = 0.8) -> None:
+        if image is None:
+            raise ValueError('人脸录入必须提供原始采集图片')
+        import cv2
+        ok, buffer = cv2.imencode('.jpg', image, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        if not ok:
+            raise RuntimeError('原始人脸图片编码失败')
+        image_bytes = buffer.tobytes()
+        device_id = self.config.get('Kiosk', 'device_id', 'EDGE-KIOSK-01')
+        template = BioTemplate(
+            'face',
+            arrays={'embedding': np.asarray(embedding, dtype=np.float32)},
+            quality=float(quality),
+            meta={'source': 'kiosk_face_enroll'},
+        )
+        self.bio_store.save(name, template, device_id=device_id)
         with self._lock:
             self._faces[name] = np.asarray(embedding, dtype=np.float32)
-            self._persist()
-        if image is not None:
-            self.save_image(name, image)
+        self.capture_repo.save_capture(
+            name, 'face', image_bytes, template,
+            device_id=device_id,
+            image_mime='image/jpeg',
+            meta={'source': 'kiosk_face_enroll'},
+        )
 
     def remove(self, name: str) -> None:
         with self._lock:

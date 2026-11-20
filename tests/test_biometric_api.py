@@ -65,6 +65,16 @@ class BiometricApiTests(unittest.TestCase):
                              content_type='multipart/form-data')
         self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
         self.assertTrue(r.get_json()['data']['ok'])
+        versions = self.client.get(
+            '/api/biometrics/captures/versions?subject=api-test&modality=fingerprint&device_id=WEB'
+        )
+        self.assertEqual(versions.status_code, 200)
+        self.assertEqual(len(versions.get_json()['data']), 1)
+        image = self.client.get(
+            '/api/biometrics/captures/image?subject=api-test&modality=fingerprint&device_id=WEB'
+        )
+        self.assertEqual(image.status_code, 200)
+        self.assertEqual(image.data, self._png(1))
 
         data = {'modality': 'fingerprint',
                 'file': (io.BytesIO(self._png(1)), 'fp.png')}
@@ -87,6 +97,25 @@ class BiometricApiTests(unittest.TestCase):
         r = self.client.post('/api/biometrics/enroll',
                              data={'subject': 'x', 'modality': 'face'})
         self.assertEqual(r.status_code, 409)
+
+    def test_consent_grant_and_withdraw_api(self):
+        payload = {
+            'subject': 'api-consent',
+            'modality': 'iris',
+            'consent_version': 'v1.0',
+            'consent_hash': 'a' * 64,
+        }
+        r = self.client.post('/api/biometrics/consent/grant', json=payload)
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        self.assertEqual(r.get_json()['data']['status'], 'granted')
+        r = self.client.get(
+            '/api/biometrics/consent/latest?subject=api-consent&modality=iris&device_id=WEB'
+        )
+        self.assertEqual(r.status_code, 200)
+        payload['consent_hash'] = 'b' * 64
+        r = self.client.post('/api/biometrics/consent/withdraw', json=payload)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()['data']['status'], 'withdrawn')
 
 
 if __name__ == '__main__':

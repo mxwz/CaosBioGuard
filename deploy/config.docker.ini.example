@@ -1,5 +1,5 @@
 ; Caos BioGuard Docker / 新部署示例配置
-; 复制为 config.ini 后修改；不要提交真实密钥。
+; 复制为 config.ini 后修改；真实密钥优先使用环境变量，不要提交真实密钥。
 [General]
 mode=standalone
 ; offline/online；离线时本地识别并写入 outbox，恢复网络后同步
@@ -39,21 +39,22 @@ region=auto
 [MySQL]
 host=mysql
 user=caos
-password=caos_pwd
+password=
 database=caos_bioguard
 port=3306
 
 [Security]
-; 32 字节 urlsafe base64 的 Fernet key；留空会退化为明文并告警
+; Fernet key；也可通过 CAOS_ENCRYPTION_KEY 注入。生产环境留空且未配置环境变量时拒绝写入。
 encryptionkey=
+flask_secret_key=
 
 [WebAdmin]
 host=0.0.0.0
-port=5000
+port=6100
 protocol=http
-; 手机端/小程序/Agent 调 API 用；生产务必替换
-token=change-me-to-a-long-random-token
-salt=change-me-salt
+; 手机端/小程序/Agent 调 API 用；也可通过环境变量注入，生产环境必须替换。
+token=
+salt=
 ; 逗号分隔跨域白名单，例如 https://guard.example.com；空表示仅同源
 cors_origins=
 
@@ -76,12 +77,12 @@ theme=obsidian
 camera_index=0
 fullscreen=true
 threshold=0.45
-liveness_mode=degraded
-liveness_threshold=0.55
+liveness_mode=strict
+liveness_threshold=0.72
 cooldown=3
 device_id=edge-001
 company=Caos BioGuard
-admin_pin=123456
+admin_pin=
 
 [Sync]
 endpoint=
@@ -106,6 +107,15 @@ reader_protocol=wiegand26
 lock_name=door-lock
 
 ; 厂商 SDK 默认关闭；接入真实设备时 enabled=true，并按 SDK 包装方式填写
+[VendorSDK.face]
+enabled=false
+vendor=baidu
+mode=ctypes
+wrapper_library=vendor_wrappers/caos_bdface.dll
+license_path=
+model_path=
+sdk_version=8.4
+
 [VendorSDK.fingerprint]
 enabled=false
 vendor=example

@@ -17,6 +17,8 @@ from .base import ImageEngine, ModalityEngine, ScoreCalibrator, TemplateGallery,
 from .fusion import FusionPolicy, FusionResult, evaluate_thresholds, fuse
 from .liveness import (ActiveChallenge, FaceLivenessDetector, FacePadGate, LivenessPolicy,
                        TemporalGuard, crop_face, liveness_compatibility)
+from .capture_store import CaptureRepository, CaptureVersion
+from .consent import ConsentRecord, ConsentRepository
 from .registry import BiometricRegistry, build_biometric_registry
 from .service import BiometricService, EnrollResult
 from .store import BioTemplateStore, StoredTemplate, TemplateCipher
@@ -31,6 +33,8 @@ __all__ = [
     'BiometricRegistry', 'build_biometric_registry',
     'BiometricService', 'EnrollResult',
     'BioTemplateStore', 'StoredTemplate', 'TemplateCipher',
+    'CaptureRepository', 'CaptureVersion',
+    'ConsentRecord', 'ConsentRepository',
     'FusionPolicy', 'FusionResult', 'fuse', 'evaluate_thresholds',
     'LivenessPolicy', 'FaceLivenessDetector', 'FacePadGate', 'TemporalGuard',
     'ActiveChallenge', 'crop_face', 'liveness_compatibility',

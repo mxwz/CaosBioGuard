@@ -508,8 +508,10 @@ class KioskWindow(QMainWindow):
                 raise ValueError(f'人脸质量不足（{tmpl.quality:.2f}），请正对光源重拍')
             bbox = tmpl.arrays['bbox'].reshape(-1).astype(int)
             crop = frame[max(0, bbox[1]):bbox[3], max(0, bbox[0]):bbox[2]].copy()
+            if crop.size == 0:
+                raise ValueError('未能截取有效人脸原图，请调整位置后重拍')
             emb = tmpl.arrays['embedding'].reshape(-1)
-            self.repo.add_face(name, emb, crop if crop.size else None)
+            self.repo.add_face(name, emb, crop, quality=tmpl.quality)
             return {'quality': tmpl.quality, 'crop': crop}
 
         def done(result):

@@ -24,6 +24,7 @@ from agent_tools.tools import agent_bp, init_agent_tools, build_tool_registry
 from agent_tools.mcp import mcp_bp
 from notify import init_notify_center, get_notify_center, Event
 from registry import init_registry_center, get_registry_center
+from biometrics import BioTemplate, CaptureRepository
 
 config_manager = ConfigManager()
 app = Flask(__name__)
@@ -90,6 +91,10 @@ db_manager = SyncDatabaseManager(database_path=DB_PATH, sqlite_path=SQLITE_PATH,
 db_manager.face_images_dir = FACE_IMAGES_DIR
 if not os.path.exists(FACE_IMAGES_DIR):
     os.makedirs(FACE_IMAGES_DIR)
+capture_repo = CaptureRepository(
+    os.path.join(BASE_DIR, 'dd', 'capture_versions.db'),
+    config_manager=config_manager,
+)
 
 # Agent 工具层：复用云端单例，作为独立 Blueprint 注册
 init_agent_tools(db_manager, config_manager, face_store)
@@ -181,6 +186,7 @@ def _expected_token(kind: str) -> str:
 
 def _sync_hmac_secret() -> str:
     return (os.environ.get('CAOS_SYNC_HMAC_SECRET')
+            or os.environ.get('CAOS_HMAC_SECRET')
             or str((config_manager.get_section('Sync') or {}).get('hmac_secret') or '')
             or str((config_manager.get_section('Security') or {}).get('sync_hmac_secret') or ''))
 
@@ -939,6 +945,17 @@ def add_face():
             # Add face to DB（支持多设备：每个设备一条记录，图片/特征独立存储）
             for did in device_ids:
                 db_manager.add_face(name, faces[0].embedding, face_image=img, groups=groups_str, list_type=list_type, metadata=metadata, device_id=did)
+                face_template = BioTemplate(
+                    modality='face',
+                    arrays={'embedding': np.asarray(faces[0].embedding, dtype=np.float32)},
+                    quality=float(getattr(faces[0], 'det_score', 0.8) or 0.8),
+                    meta={'groups': groups_str, 'list_type': list_type},
+                )
+                capture_repo.save_capture(
+                    name, 'face', img_bytes, face_template, device_id=did,
+                    image_mime=file.mimetype or 'image/jpeg',
+                    meta={'source': 'web_face_management', **metadata},
+                )
             device_desc = '全局' if device_ids == ['admin'] else ",".join(device_ids)
             db_manager.add_admin_log(user, 'add_face', name, f'Groups: {groups_str}, List: {list_type}, Device: {device_desc}', 'high')
             flash(f'成功添加用户: {name}（设备: {device_desc}）', 'success')
@@ -1100,8 +1117,14 @@ def toggle_admin(name):
 
 @app.route('/face_image/<name>')
 def face_image(name):
-    """Serve face image（统一走 load_face_image，本地/云端后端均可）"""
+    """优先返回加密采集仓库中的当前人脸原图，旧本地图片作为兼容回退。"""
     device_id = request.args.get('device_id')
+    capture = (
+        capture_repo.active_version(name, 'face', device_id)
+        if device_id else capture_repo.active_any_device(name, 'face')
+    )
+    if capture is not None:
+        return Response(capture.image_bytes, mimetype=capture.image_mime)
     img = db_manager.load_face_image(name, device_id)
     if img is not None:
         ok, buffer = cv2.imencode('.jpg', img)
@@ -2043,7 +2066,7 @@ def inject_registry_nav():
 if __name__ == '__main__':
     load_dotenv(find_dotenv())
     # context = (r'C:\Users\yang\localhost.pem', r'C:\Users\yang\localhost-key.pem')
-    flask_port = int(os.environ.get('FLASK_PORT', 5000))
+    flask_port = int(os.environ.get('FLASK_PORT', 6100))
     
     # 默认设置为开发环境 'development'
     flask_env = os.environ.get('FLASK_ENV', 'development')

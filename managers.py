@@ -233,12 +233,12 @@ class ConfigManager:
         return {
             'protocol': self.config.get('WebAdmin', 'Protocol', fallback='http'),
             'host': self.config.get('WebAdmin', 'Host', fallback='localhost'),
-            'port': self.config.getint('WebAdmin', 'Port', fallback=5000),
+            'port': self.config.getint('WebAdmin', 'Port', fallback=6100),
             'token': self.config.get('WebAdmin', 'Token', fallback=''),
             'salt': self.config.get('WebAdmin', 'Salt', fallback='')
         }
 
-    def set_web_admin_config(self, host, port=5000, token=None, salt=None, protocol=None):
+    def set_web_admin_config(self, host, port=6100, token=None, salt=None, protocol=None):
         if 'WebAdmin' not in self.config:
             self.config['WebAdmin'] = {}
         self.config['WebAdmin']['Host'] = host
@@ -282,18 +282,21 @@ class ConfigManager:
 
     def get_encryption_key(self):
         self.config.read(self.config_path, encoding='utf-8')
-        key = self.config.get('Security', 'EncryptionKey', fallback=None)
+        env_key = os.environ.get('CAOS_ENCRYPTION_KEY')
+        key = env_key or self.config.get('Security', 'EncryptionKey', fallback=None)
         if not key:
-            if Fernet:
-                key = Fernet.generate_key().decode()
-                if 'Security' not in self.config:
-                    self.config['Security'] = {}
-                self.config['Security']['EncryptionKey'] = key
-                with open(self.config_path, 'w', encoding='utf-8') as f:
-                    self.config.write(f)
-            else:
+            if not Fernet:
                 logger.warning("Cryptography not installed, using plain text fallback")
                 return None
+            if os.environ.get('FLASK_ENV', 'development').lower() == 'production':
+                raise RuntimeError('生产环境必须设置 CAOS_ENCRYPTION_KEY 或 [Security] EncryptionKey')
+            key = Fernet.generate_key().decode()
+            if 'Security' not in self.config:
+                self.config['Security'] = {}
+            self.config['Security']['EncryptionKey'] = key
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                self.config.write(f)
+            logger.warning('未配置加密密钥，开发环境已生成并保存临时 Fernet 密钥')
         return key.encode() if key else None
 
     def get_cloud_enabled(self):
@@ -355,6 +358,7 @@ def _sync_bearer(cm):
 
 def _sync_hmac(cm):
     return (os.environ.get('CAOS_SYNC_HMAC_SECRET')
+            or os.environ.get('CAOS_HMAC_SECRET')
             or str((cm.get_section('Sync') or {}).get('hmac_secret') or '')
             or str((cm.get_section('Security') or {}).get('sync_hmac_secret') or ''))
 
