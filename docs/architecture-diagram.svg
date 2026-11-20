@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="1054" viewBox="0 0 1480 1054" font-family="'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Segoe UI',Arial,sans-serif">
+<defs>
+<marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="#64748b"/></marker>
+<filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0f172a" flood-opacity="0.12"/></filter>
+</defs>
+<rect x="0" y="0" width="1480" height="1054" fill="#f8fafc"/>
+<text x="740.0" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">CaosBioGuard · 多生物识别门禁系统架构</text>
+<rect x="40" y="40" width="1400" height="134" rx="12" fill="#efeffd" stroke="#6366f1" stroke-width="1.5"/>
+<path d="M52,40 H1428 A12,12 0 0 1 1440,52 V74 H40 V52 A12,12 0 0 1 52,40 Z" fill="#6366f1"/>
+<text x="56" y="64.0" font-size="16" font-weight="700" fill="#ffffff">客户端 / 交互层</text>
+<rect x="60.0" y="90" width="326.5" height="66" rx="9" fill="#ffffff" stroke="#6366f1" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="223.2" y="125.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">边缘 Kiosk 触屏</text>
+<text x="223.2" y="144.0" text-anchor="middle" font-size="12" fill="#64748b">PySide6</text>
+<rect x="404.5" y="90" width="326.5" height="66" rx="9" fill="#ffffff" stroke="#6366f1" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="567.8" y="125.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">浏览器管理后台</text>
+<text x="567.8" y="144.0" text-anchor="middle" font-size="12" fill="#64748b">Web</text>
+<rect x="749.0" y="90" width="326.5" height="66" rx="9" fill="#ffffff" stroke="#6366f1" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="912.2" y="125.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">移动端</text>
+<text x="912.2" y="144.0" text-anchor="middle" font-size="12" fill="#64748b">PWA / 小程序 / APK</text>
+<rect x="1093.5" y="90" width="326.5" height="66" rx="9" fill="#ffffff" stroke="#6366f1" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="1256.8" y="125.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">AI Agent</text>
+<text x="1256.8" y="144.0" text-anchor="middle" font-size="12" fill="#64748b">MCP</text>
+<rect x="40" y="208" width="1400" height="134" rx="12" fill="#e6f6fc" stroke="#0ea5e9" stroke-width="1.5"/>
+<path d="M52,208 H1428 A12,12 0 0 1 1440,220 V242 H40 V220 A12,12 0 0 1 52,208 Z" fill="#0ea5e9"/>
+<text x="56" y="232.0" font-size="16" font-weight="700" fill="#ffffff">应用接入层</text>
+<rect x="60.0" y="258" width="441.3" height="66" rx="9" fill="#ffffff" stroke="#0ea5e9" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="280.7" y="293.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">sideUI.kiosk</text>
+<text x="280.7" y="312.0" text-anchor="middle" font-size="12" fill="#64748b">python -m sideUI.kiosk.app</text>
+<rect x="519.3" y="258" width="441.3" height="66" rx="9" fill="#ffffff" stroke="#0ea5e9" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="740.0" y="293.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">web_admin</text>
+<text x="740.0" y="312.0" text-anchor="middle" font-size="12" fill="#64748b">Flask + waitress</text>
+<rect x="978.7" y="258" width="441.3" height="66" rx="9" fill="#ffffff" stroke="#0ea5e9" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="1199.3" y="293.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">agent_tools / mobile_api</text>
+<text x="1199.3" y="312.0" text-anchor="middle" font-size="12" fill="#64748b">HTTP 接口</text>
+<rect x="40" y="376" width="1400" height="134" rx="12" fill="#e7f8f2" stroke="#10b981" stroke-width="1.5"/>
+<path d="M52,376 H1428 A12,12 0 0 1 1440,388 V410 H40 V388 A12,12 0 0 1 52,376 Z" fill="#10b981"/>
+<text x="56" y="400.0" font-size="16" font-weight="700" fill="#ffffff">核心业务层 · biometrics</text>
+<rect x="60.0" y="426" width="441.3" height="66" rx="9" fill="#ffffff" stroke="#10b981" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="280.7" y="461.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">service</text>
+<text x="280.7" y="480.0" text-anchor="middle" font-size="12" fill="#64748b">注册 / 验证 / 多因子</text>
+<rect x="519.3" y="426" width="441.3" height="66" rx="9" fill="#ffffff" stroke="#10b981" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="740.0" y="461.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">fusion</text>
+<text x="740.0" y="480.0" text-anchor="middle" font-size="12" fill="#64748b">多模态融合</text>
+<rect x="978.7" y="426" width="441.3" height="66" rx="9" fill="#ffffff" stroke="#10b981" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="1199.3" y="461.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">registry</text>
+<text x="1199.3" y="480.0" text-anchor="middle" font-size="12" fill="#64748b">引擎注册 / 容错</text>
+<rect x="40" y="544" width="1400" height="134" rx="12" fill="#fef5e6" stroke="#f59e0b" stroke-width="1.5"/>
+<path d="M52,544 H1428 A12,12 0 0 1 1440,556 V578 H40 V556 A12,12 0 0 1 52,544 Z" fill="#f59e0b"/>
+<text x="56" y="568.0" font-size="16" font-weight="700" fill="#ffffff">识别引擎层 · 9 模态</text>
+<rect x="60.0" y="594" width="326.5" height="66" rx="9" fill="#ffffff" stroke="#f59e0b" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="223.2" y="623.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">人脸 / 声纹 / 指纹</text>
+<rect x="404.5" y="594" width="326.5" height="66" rx="9" fill="#ffffff" stroke="#f59e0b" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="567.8" y="623.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">虹膜 / 掌纹 / 指静脉</text>
+<rect x="749.0" y="594" width="326.5" height="66" rx="9" fill="#ffffff" stroke="#f59e0b" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="912.2" y="623.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">步态 / 视网膜 / 签名</text>
+<rect x="1093.5" y="594" width="326.5" height="66" rx="9" fill="#ffffff" stroke="#f59e0b" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="1256.8" y="629.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">adapters 厂商适配</text>
+<text x="1256.8" y="648.0" text-anchor="middle" font-size="12" fill="#64748b">百度 / 腾讯 / 阿里 / 华为</text>
+<rect x="40" y="712" width="1400" height="134" rx="12" fill="#f3eefe" stroke="#8b5cf6" stroke-width="1.5"/>
+<path d="M52,712 H1428 A12,12 0 0 1 1440,724 V746 H40 V724 A12,12 0 0 1 52,712 Z" fill="#8b5cf6"/>
+<text x="56" y="736.0" font-size="16" font-weight="700" fill="#ffffff">平台与硬件层</text>
+<rect x="60.0" y="762" width="441.3" height="66" rx="9" fill="#ffffff" stroke="#8b5cf6" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="280.7" y="797.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">platform_utils</text>
+<text x="280.7" y="816.0" text-anchor="middle" font-size="12" fill="#64748b">系统 / 架构识别</text>
+<rect x="519.3" y="762" width="441.3" height="66" rx="9" fill="#ffffff" stroke="#8b5cf6" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="740.0" y="797.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">hardware</text>
+<text x="740.0" y="816.0" text-anchor="middle" font-size="12" fill="#64748b">门锁与设备</text>
+<rect x="978.7" y="762" width="441.3" height="66" rx="9" fill="#ffffff" stroke="#8b5cf6" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="1199.3" y="797.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">x2000</text>
+<text x="1199.3" y="816.0" text-anchor="middle" font-size="12" fill="#64748b">串口协议</text>
+<rect x="40" y="880" width="1400" height="134" rx="12" fill="#fdecec" stroke="#ef4444" stroke-width="1.5"/>
+<path d="M52,880 H1428 A12,12 0 0 1 1440,892 V914 H40 V892 A12,12 0 0 1 52,880 Z" fill="#ef4444"/>
+<text x="56" y="904.0" font-size="16" font-weight="700" fill="#ffffff">数据与安全层</text>
+<rect x="60.0" y="930" width="211.7" height="66" rx="9" fill="#ffffff" stroke="#ef4444" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="165.8" y="965.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">store</text>
+<text x="165.8" y="984.0" text-anchor="middle" font-size="12" fill="#64748b">加密模板</text>
+<rect x="289.7" y="930" width="211.7" height="66" rx="9" fill="#ffffff" stroke="#ef4444" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="395.5" y="965.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">capture_store</text>
+<text x="395.5" y="984.0" text-anchor="middle" font-size="12" fill="#64748b">加密样本</text>
+<rect x="519.3" y="930" width="211.7" height="66" rx="9" fill="#ffffff" stroke="#ef4444" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="625.2" y="965.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">consent</text>
+<text x="625.2" y="984.0" text-anchor="middle" font-size="12" fill="#64748b">同意记录</text>
+<rect x="749.0" y="930" width="211.7" height="66" rx="9" fill="#ffffff" stroke="#ef4444" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="854.8" y="965.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">SQLite / MySQL</text>
+<text x="854.8" y="984.0" text-anchor="middle" font-size="12" fill="#64748b">数据库</text>
+<rect x="978.7" y="930" width="211.7" height="66" rx="9" fill="#ffffff" stroke="#ef4444" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="1084.5" y="965.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">sync</text>
+<text x="1084.5" y="984.0" text-anchor="middle" font-size="12" fill="#64748b">云边同步</text>
+<rect x="1208.3" y="930" width="211.7" height="66" rx="9" fill="#ffffff" stroke="#ef4444" stroke-width="1.4" filter="url(#shadow)"/>
+<text x="1314.2" y="965.0" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">notify</text>
+<text x="1314.2" y="984.0" text-anchor="middle" font-size="12" fill="#64748b">邮件 / Webhook</text>
+<path d="M223.2,176.0 L280.7,206.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M567.8,176.0 L740.0,206.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M912.2,176.0 L740.0,206.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M1256.8,176.0 L1199.3,206.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M280.7,344.0 L280.7,374.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M740.0,344.0 L740.0,374.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M1199.3,344.0 L1199.3,374.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M280.7,512.0 L223.2,542.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M740.0,512.0 L912.2,542.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M1199.3,512.0 L1256.8,542.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M223.2,680.0 L280.7,710.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M567.8,680.0 L740.0,710.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M912.2,680.0 L740.0,710.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M1256.8,680.0 L1199.3,710.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M280.7,848.0 L165.8,878.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M740.0,848.0 L625.2,878.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+<path d="M1199.3,848.0 L1314.2,878.0" fill="none" stroke="#64748b" stroke-width="1.6" opacity="0.55" marker-end="url(#arrow)"/>
+</svg>

@@ -71,5 +71,7 @@ docs/*
 !docs/release-guide.md
 !docs/git-notes.md
 !docs/x2000-protocol-dump.txt
+!docs/architecture.md
+!docs/architecture-diagram.svg
 # 评估/审查报告类文件仅本地留存，不入库；统一放 docs/reports/ 并以日期命名
 docs/reports/
