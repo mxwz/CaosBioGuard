@@ -1,0 +1,12 @@
+schema_version = "1.0"
+plugin_id = "aliyun.face.facebody"
+name = "阿里云 VIAPI Facebody 人脸比对"
+version = "0.2.4"
+vendor = "aliyun"
+modalities = ["face"]
+platforms = ["windows-x64", "linux-x64"]
+adapter_class = "adapter.Plugin"
+capabilities = ["detect", "quality", "compare"]
+permissions = ["camera", "network.lan"]
+min_app_version = "0.2.4"
+enabled_by_default = false

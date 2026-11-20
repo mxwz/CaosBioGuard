@@ -1,0 +1,12 @@
+schema_version = "1.0"
+plugin_id = "aliyun.face.cloudauth"
+name = "阿里云金融级实人认证"
+version = "0.2.4"
+vendor = "aliyun"
+modalities = ["face"]
+platforms = ["windows-x64", "linux-x64"]
+adapter_class = "adapter.Plugin"
+capabilities = ["detect", "quality", "compare", "liveness.rgb"]
+permissions = ["camera", "network.lan"]
+min_app_version = "0.2.4"
+enabled_by_default = false

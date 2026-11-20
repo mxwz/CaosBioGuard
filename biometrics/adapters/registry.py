@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 from .baidu_face import BaiduFaceSDKAdapter
+from .aliyun import build_aliyun_adapter
 from .base import VendorAdapter
 from .generic import GenericSDKAdapter
 
@@ -39,6 +40,8 @@ class VendorAdapterRegistry:
             vendor = str(section.get('vendor', 'generic'))
             if vendor == 'baidu' and modality == 'face':
                 adapters[modality] = BaiduFaceSDKAdapter(modality, vendor, section)
+            elif vendor == 'aliyun' and modality == 'face':
+                adapters[modality] = build_aliyun_adapter(section.get('route', 'facebody'), section)
             else:
                 adapters[modality] = GenericSDKAdapter(modality, vendor, section)
         return cls(adapters, default_policy, allow_fallback, modality_policies)

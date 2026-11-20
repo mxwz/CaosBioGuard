@@ -24,7 +24,7 @@ from flask import Blueprint, Response, jsonify, request, session
 
 from biometrics import (BioSample, BioTemplateStore, BiometricService,
                         CaptureRepository, ConsentRepository, PluginManager,
-                        build_biometric_registry)
+                        build_aliyun_adapter, build_biometric_registry)
 from biometrics.plugins import safe_extract_zip
 from biometrics.plugins.template_import import import_template_package
 from biometrics.engines.audio_utils import read_wav
@@ -410,6 +410,81 @@ def create_biometric_blueprint(config_manager, base_dir: str, url_prefix: str = 
             return _err('plugin_id 必填')
         ok, reason = plugin_manager.health_check(plugin_id)
         return jsonify({'status': 'ok', 'data': {'ok': ok, 'message': reason}})
+
+    def _aliyun_route_meta(route: str) -> Dict[str, Any]:
+        names = {
+            'facebody': 'VIAPI Facebody 通用云端人脸 1:1 比对',
+            'imm': 'IMM 智能媒体管理，配合 OSS 做人脸相似度对比',
+            'cloudauth': 'CloudAuth 金融级实人认证、活体、工单和风控',
+            'android_aar': 'Android AAR 端侧 SDK，真机本地活体和认证',
+        }
+        requires = {
+            'facebody': ['AccessKey ID/Secret', '地域/Endpoint', '图片 URL 或本地文件'],
+            'imm': ['AccessKey ID/Secret', 'ProjectName', '同地域 OSS Bucket/URI'],
+            'cloudauth': ['AccessKey ID/Secret', 'SceneId', 'ProductCode', '认证流程配置'],
+            'android_aar': ['完整 AAR', '授权/License', '包名和签名', '原生 Capacitor 插件'],
+        }
+        return {'route': route, 'name': names[route], 'required': requires[route]}
+
+    @bp.get('/cloud-vendors/catalog')
+    def cloud_vendor_catalog():
+        guard = _guard()
+        if guard:
+            return guard
+        data = []
+        for route in ('facebody', 'imm', 'cloudauth', 'android_aar'):
+            item = _aliyun_route_meta(route)
+            adapter = build_aliyun_adapter(route, {'mock': True})
+            ok, message = adapter.check_available()
+            item['mock_available'] = ok
+            item['mock_message'] = message
+            data.append(item)
+        return jsonify({'status': 'ok', 'data': {'aliyun': data}})
+
+    @bp.post('/cloud-vendors/aliyun/mock')
+    def aliyun_mock_flow():
+        guard = _guard()
+        if guard:
+            return guard
+        payload = _payload()
+        route = str(payload.get('route') or 'facebody').strip().lower()
+        valid_routes = {'facebody', 'imm', 'cloudauth', 'android_aar'}
+        if route not in valid_routes:
+            return _err(f'未知阿里云路线: {route}')
+        adapter = build_aliyun_adapter(route, {
+            'mock': True,
+            'project_name': 'mock-project',
+            'scene_id': 0,
+            'native_bridge_ready': True,
+        })
+        ok, message = adapter.check_available()
+        if not ok:
+            return _err(message)
+        sample_a = BioSample.image(np.zeros((32, 32, 3), dtype=np.uint8), subject='mock-a')
+        sample_b = BioSample.image(np.ones((32, 32, 3), dtype=np.uint8) * 255, subject='mock-b')
+        quality_a = adapter.quality(sample_a)
+        template_a = adapter.extract(sample_a)
+        template_b = adapter.extract(sample_b)
+        liveness = adapter.liveness(sample_a)
+
+        def summarize(template):
+            return {
+                'modality': template.modality,
+                'quality': round(float(template.quality), 4),
+                'arrays': sorted(template.arrays.keys()),
+                'meta': template.meta,
+            }
+
+        return jsonify({'status': 'ok', 'data': {
+            'route': route,
+            'availability': {'ok': ok, 'message': message},
+            'quality': quality_a.to_dict(),
+            'template_a': summarize(template_a),
+            'template_b': summarize(template_b),
+            'same_score': round(float(adapter.compare(template_a, template_a)), 4),
+            'different_score': round(float(adapter.compare(template_a, template_b)), 4),
+            'liveness': liveness.to_dict(),
+        }})
 
     @bp.post('/templates/import')
     def import_standard_template():

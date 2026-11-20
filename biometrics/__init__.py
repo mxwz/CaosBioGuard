@@ -12,8 +12,9 @@
 设计文档见 ``docs/biometrics-api.md`` 与 ``docs/hardware-design.md``。
 """
 
-from .adapters import (BaiduFaceSDKAdapter, GenericSDKAdapter, HybridEngine,
-                       VendorAdapter, VendorAdapterRegistry, normalize_template)
+from .adapters import (AliyunAndroidAARAdapter, AliyunCloudAuthAdapter, AliyunFacebodyAdapter,
+                       AliyunIMMAdapter, BaiduFaceSDKAdapter, GenericSDKAdapter, HybridEngine,
+                       VendorAdapter, VendorAdapterRegistry, build_aliyun_adapter, normalize_template)
 from .base import ImageEngine, ModalityEngine, ScoreCalibrator, TemplateGallery, cosine_score, l2norm
 from .fusion import FusionPolicy, FusionResult, evaluate_thresholds, fuse
 from .liveness import (ActiveChallenge, FaceLivenessDetector, FacePadGate, LivenessPolicy,
@@ -30,9 +31,10 @@ from .types import (BioSample, BioTemplate, LivenessReport, MatchResult, Modalit
 __all__ = [
     'BioSample', 'BioTemplate', 'QualityReport', 'MatchResult', 'LivenessReport', 'ModalitySpec',
     'ModalityEngine', 'ImageEngine', 'TemplateGallery', 'ScoreCalibrator',
-    'VendorAdapter', 'BaiduFaceSDKAdapter', 'GenericSDKAdapter',
-    'VendorAdapterRegistry', 'HybridEngine',
-    'normalize_template',
+    'VendorAdapter', 'AliyunAndroidAARAdapter', 'AliyunCloudAuthAdapter',
+    'AliyunFacebodyAdapter', 'AliyunIMMAdapter', 'BaiduFaceSDKAdapter',
+    'GenericSDKAdapter', 'VendorAdapterRegistry', 'HybridEngine',
+    'build_aliyun_adapter', 'normalize_template',
     'BiometricRegistry', 'build_biometric_registry',
     'BiometricService', 'EnrollResult',
     'BioTemplateStore', 'StoredTemplate', 'TemplateCipher',

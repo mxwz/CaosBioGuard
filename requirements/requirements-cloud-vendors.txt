@@ -1,0 +1,13 @@
+# 可选：云端厂商 SDK。默认业务运行不强制安装；mock 测试不需要这些依赖。
+# 阿里云 VIAPI Facebody
+alibabacloud_facebody20191230>=6.0
+# 阿里云 IMM
+alibabacloud_imm20200930>=4.0
+# 阿里云金融级实人认证
+alibabacloud_cloudauth20190307>=2.0
+# 阿里云 Tea SDK 与默认凭据链
+alibabacloud_tea_openapi>=0.3
+alibabacloud_tea_util>=0.3
+alibabacloud_credentials>=0.3
+# OSS/IMM 本地图片上传与 URI 管理
+oss2>=2.18

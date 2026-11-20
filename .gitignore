@@ -66,6 +66,7 @@ docs/*
 !docs/capture-versioning.md
 !docs/consent-and-pia.md
 !docs/baidu-face-sdk-integration.md
+!docs/aliyun-integration.md
 !docs/hardware-apk-deployment.md
 !docs/release-guide.md
 !docs/git-notes.md

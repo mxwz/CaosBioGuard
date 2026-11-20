@@ -184,6 +184,20 @@ file = "arrays/embedding.npy"
         self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
         self.assertTrue(r.get_json()['data']['raw_saved'])
 
+    def test_aliyun_catalog_and_mock_flow(self):
+        r = self.client.get('/api/biometrics/cloud-vendors/catalog')
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        routes = [item['route'] for item in r.get_json()['data']['aliyun']]
+        self.assertEqual(routes, ['facebody', 'imm', 'cloudauth', 'android_aar'])
+        for route in routes:
+            rr = self.client.post('/api/biometrics/cloud-vendors/aliyun/mock',
+                                  json={'route': route})
+            self.assertEqual(rr.status_code, 200, rr.get_data(as_text=True))
+            data = rr.get_json()['data']
+            self.assertGreaterEqual(data['same_score'], 0.9)
+            self.assertLess(data['different_score'], 0.5)
+            self.assertTrue(data['liveness']['passed'])
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
