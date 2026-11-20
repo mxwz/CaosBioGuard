@@ -22,6 +22,7 @@ from PySide6.QtCore import QObject, QRunnable, QThread, QThreadPool, Signal, Slo
 
 from biometrics import FaceLivenessDetector, FacePadGate, LivenessPolicy
 from biometrics.base import cosine_similarity
+from platform_utils import default_camera_backend
 
 from .data import KioskConfig, SubjectRepository
 
@@ -59,8 +60,11 @@ class CameraWorker(QThread):
         self._running = True
         cap = None
         try:
-            backend = cv2.CAP_DSHOW if hasattr(cv2, 'CAP_DSHOW') else cv2.CAP_ANY
-            cap = cv2.VideoCapture(self.index, backend)
+            backend = default_camera_backend()
+            if backend is not None:
+                cap = cv2.VideoCapture(self.index, backend)
+            else:
+                cap = cv2.VideoCapture(self.index)
             if not cap.isOpened():
                 cap = cv2.VideoCapture(self.index)
             if not cap.isOpened():

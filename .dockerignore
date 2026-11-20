@@ -18,10 +18,8 @@ web_admin/uploads
 web_admin/.env
 config.ini
 *.log
-dify
-test
 x2000
 X2000开发资料&固件升级工具
 docs/x2000-protocol-dump.txt
 docs/git-notes.md
-docs/CaosBioGuard-评估审查报告.html
+docs/reports

@@ -16,28 +16,45 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QPalette
 from PySide6.QtWidgets import QApplication
 
+from platform_utils import IS_MACOS, IS_WINDOWS
+
 _FONTS_READY = False
 
 
+def _font_candidates() -> tuple:
+    """按平台返回中文字体族优先级，QSS 与 QFont 选择共用。"""
+    if IS_WINDOWS:
+        return ('Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC', 'sans-serif')
+    if IS_MACOS:
+        return ('PingFang SC', 'Heiti SC', 'Noto Sans CJK SC', 'sans-serif')
+    return ('Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'WenQuanYi Zen Hei',
+            'Source Han Sans CN', 'sans-serif')
+
+
 def ensure_fonts(app: Optional[QApplication]) -> None:
-    """显式加载中文字体。
+    """显式加载中文字体并选择可用字体族。
 
     Qt 的 offscreen/服务化环境经常拿不到系统字体库，导致整屏「豆腐块」；
-    这里直接从 Windows 字体目录注册，保证 Kiosk 在无桌面会话时也能正常渲染。
+    这里按平台尝试注册本地字体文件（不存在则静默跳过），再从候选字体族中
+    选择当前系统实际可用的一个，保证 Kiosk 在无桌面会话时也能正常渲染。
     """
     global _FONTS_READY
     if _FONTS_READY or app is None:
         return
     _FONTS_READY = True
-    for path in ('C:/Windows/Fonts/msyh.ttc', 'C:/Windows/Fonts/msyhbd.ttc',
-                 'C:/Windows/Fonts/consola.ttf'):
+    font_files = (
+        'C:/Windows/Fonts/msyh.ttc', 'C:/Windows/Fonts/msyhbd.ttc',
+        'C:/Windows/Fonts/consola.ttf',
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
+    )
+    for path in font_files:
         try:
             QFontDatabase.addApplicationFont(path)
         except Exception:
             pass
     families = set(QFontDatabase.families())
-    family = 'Microsoft YaHei UI' if 'Microsoft YaHei UI' in families else (
-        'Microsoft YaHei' if 'Microsoft YaHei' in families else app.font().family())
+    family = next((c for c in _font_candidates() if c in families), app.font().family())
     app.setFont(QFont(family, 10))
 
 
@@ -64,7 +81,8 @@ class Theme:
     glow: str = 'rgba(37, 230, 208, 0.22)'
     radius: int = 16
     radius_sm: int = 10
-    font: str = '"Microsoft YaHei UI"'
+    font: str = ('"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", '
+                 '"Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif')
     extras: Dict[str, str] = field(default_factory=dict)
 
     def q(self, name: str) -> str:
@@ -130,7 +148,7 @@ QLabel[class="title"] { font-size: 26px; font-weight: 700; letter-spacing: 0.5px
 QLabel[class="subtitle"] { font-size: 15px; color: $text_muted; }
 QLabel[class="muted"] { color: $text_muted; }
 QLabel[class="faint"] { color: $text_faint; font-size: 12px; }
-QLabel[class="mono"] { font-family: "Cascadia Mono", "Consolas", monospace; }
+QLabel[class="mono"] { font-family: "Cascadia Mono", "Consolas", "Noto Sans Mono", "DejaVu Sans Mono", monospace; }
 QLabel[class="metric"] { font-size: 30px; font-weight: 700; }
 QLabel[class="section"] { font-size: 15px; font-weight: 600; color: $text; }
 

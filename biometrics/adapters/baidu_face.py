@@ -49,7 +49,10 @@ class BaiduFaceSDKAdapter(VendorAdapter):
         if self._dll is not None:
             return self._dll
         if not self.wrapper_path.is_file():
-            raise FileNotFoundError(f'C ABI 包装库不存在: {self.wrapper_path}')
+            raise FileNotFoundError(
+                f'C ABI 包装库不存在: {self.wrapper_path}；百度离线 SDK 适配器当前仅提供 Windows 构建，'
+                'Linux 环境请使用内置 InsightFace 人脸引擎。'
+            )
         if self.runtime_dir.is_dir() and hasattr(os, 'add_dll_directory'):
             self._dll_directory = os.add_dll_directory(str(self.runtime_dir))
         elif self.runtime_dir.is_dir():

@@ -27,14 +27,45 @@
 
 当前推荐 Python 3.13。不要复用从其他机器迁移来的 `.venv`，应重新创建。
 
-### Windows PowerShell
+### 一键安装（推荐）
+
+项目提供自动识别操作系统与 CPU 架构的安装脚本，会自动创建或复用 `.venv`，并按角色安装 `requirements/` 下的依赖。
+
+Windows PowerShell：
 
 ```powershell
 cd C:\Users\18229\Documents\work\py\CaosBioGuard
+.\scripts\install_deps.ps1              # 边缘 Kiosk（默认角色）
+.\scripts\install_deps.ps1 -Role web    # Web 服务端
+.\scripts\install_deps.ps1 -Role all    # 全部依赖
+```
+
+Linux / macOS：
+
+```bash
+cd /path/to/CaosBioGuard
+bash scripts/install_deps.sh            # 边缘 Kiosk（默认角色）
+bash scripts/install_deps.sh web        # Web 服务端
+bash scripts/install_deps.sh all        # 全部依赖
+```
+
+依赖角色对应关系：
+
+| 角色 | 依赖文件 | 适用场景 |
+|---|---|---|
+| edge | requirements-edge.txt | 边缘 Kiosk、PySide6 桌面端 |
+| web | requirements-web.txt | Web 管理后台（Flask） |
+| build | requirements-build.txt | PyInstaller 打包工具 |
+
+### 手动安装
+
+Windows PowerShell：
+
+```powershell
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip setuptools wheel
-pip install -r requirements/requirements.txt
+pip install -r requirements/requirements-edge.txt
 ```
 
 如果 PowerShell 阻止激活脚本，可执行：
@@ -44,14 +75,13 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
 
-### Linux/macOS
+Linux/macOS：
 
 ```bash
-cd /path/to/CaosBioGuard
 python3.13 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
-pip install -r requirements/requirements.txt
+pip install -r requirements/requirements-edge.txt
 ```
 
 ## 3. 密钥与敏感配置

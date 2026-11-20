@@ -5,6 +5,8 @@ from __future__ import annotations
 import threading
 from typing import Any, Callable, Dict, List, Optional
 
+from platform_utils import default_serial_port
+
 from .controllers import RelayController, SerialRelay, SimulatedRelay
 from .types import DeviceStatus, HardwareEvent
 
@@ -37,7 +39,7 @@ class HardwareManager:
             mode = 'simulator'
         if mode == 'serial':
             relay: RelayController = SerialRelay(
-                port=get('serial_port', 'COM3'),
+                port=get('serial_port', default_serial_port()),
                 baudrate=int(get('baudrate', '9600') or 9600),
                 open_command=get('open_command', 'A0 01 01 A2'),
                 close_command=get('close_command', 'A0 01 00 A1'),
