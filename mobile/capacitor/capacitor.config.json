@@ -1,0 +1,12 @@
+{
+  "appId": "com.mxwz.caosbioguard",
+  "appName": "CaosBioGuard",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

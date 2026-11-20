@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="obsidian">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CaosBioGuard</title>
+<meta name="theme-color" content="#070c12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="bg-orb"></div>
+
+<section id="loginView" class="login">
+  <div class="ring"></div>
+  <div class="login-card">
+    <div class="brand"><span class="brand-mark">C</span><div><h1>CAOS BIOGUARD</h1><p>多模态门禁 · 移动管理端</p></div></div>
+    <div class="seg">
+      <button class="seg-btn active" data-mode="admin">管理员</button>
+      <button class="seg-btn" data-mode="user">员工</button>
+    </div>
+    <div id="adminFields">
+      <label>API Token</label>
+      <input id="tokenInput" type="password" placeholder="WebAdmin Token" autocomplete="off">
+    </div>
+    <div id="userFields" class="hide">
+      <label>工号 / 姓名</label>
+      <input id="subjectInput" type="text" placeholder="例如：张三 / A1001" autocomplete="off">
+    </div>
+    <button id="loginBtn" class="primary">进入工作台</button>
+    <details class="server-settings">
+      <summary>服务器设置</summary>
+      <label>Web API 地址</label>
+      <input id="apiBaseInput" type="url" placeholder="http://192.168.2.107:6100" autocomplete="off">
+      <button id="saveApiBaseBtn" class="secondary">保存地址</button>
+    </details>
+    <p class="login-tip">管理员可注册模板、查看全部记录；员工仅查看本人记录并提交采集申请。</p>
+  </div>
+</section>
+
+<div id="appView" class="app hide">
+  <header class="topbar">
+    <div class="brand small"><span class="brand-mark">C</span><div><h1>CAOS</h1><p id="roleText">移动工作台</p></div></div>
+    <div class="top-actions"><button id="refreshBtn" class="icon-btn" title="刷新">↻</button><button id="logoutBtn" class="icon-btn" title="退出">⏻</button></div>
+  </header>
+
+  <main>
+    <section class="panel active" id="tab-overview">
+      <div class="hero">
+        <div><div class="eyebrow">TODAY</div><h2><span id="todayCount">0</span> <small>人次打卡</small></h2></div>
+        <div class="pulse"><i></i>在线</div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat"><label>人员</label><b id="statUsers">—</b></div>
+        <div class="stat"><label>设备</label><b id="statDevices">—</b></div>
+        <div class="stat"><label>模板</label><b id="statTemplates">—</b></div>
+        <div class="stat"><label>待审申请</label><b id="statRequests">—</b></div>
+      </div>
+      <div class="section-title">设备状态</div>
+      <div id="deviceList" class="list"></div>
+      <div class="section-title">最近通行</div>
+      <div id="recentList" class="list"></div>
+    </section>
+
+    <section class="panel" id="tab-records">
+      <div class="section-title row-between"><span>考勤记录</span><span class="muted" id="recordCount"></span></div>
+      <div id="recordSearchWrap" class="search hide"><input id="recordSearch" placeholder="按姓名筛选"><button id="recordSearchBtn">查询</button></div>
+      <div id="recordsList" class="list"></div>
+    </section>
+
+    <section class="panel" id="tab-enroll">
+      <div class="section-title">注册 / 采集</div>
+      <div class="form-card">
+        <label>主体</label><input id="enrollSubject" placeholder="姓名 / 工号">
+        <label>模态</label><select id="enrollModality"></select>
+        <div id="enrollHint" class="hint"></div>
+        <label>样本</label><input id="enrollFile" type="file" accept="image/*" capture="environment">
+        <div id="strokeWrap" class="hide"><label>签名轨迹 JSON</label><textarea id="enrollStrokes" rows="3" placeholder='[[[x,y,t],...]]'></textarea></div>
+        <button id="enrollBtn" class="primary">提交</button>
+        <div id="enrollResult" class="result"></div>
+      </div>
+      <div id="requestsBlock" class="section-title hide">采集申请</div>
+      <div id="requestsList" class="list"></div>
+    </section>
+
+    <section class="panel" id="tab-profile">
+      <div class="profile-head"><div class="avatar" id="avatar">C</div><div><h2 id="profileName">—</h2><p id="profileSub">多模态身份</p></div></div>
+      <div class="section-title">已注册模态</div>
+      <div id="profileModalities" class="chips"></div>
+      <div class="section-title">最近记录</div>
+      <div id="profileRecent" class="list"></div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab-btn active" data-tab="overview"><span>⌂</span>概览</button>
+    <button class="tab-btn" data-tab="records"><span>▤</span>记录</button>
+    <button class="tab-btn" data-tab="enroll"><span>✚</span>注册</button>
+    <button class="tab-btn" data-tab="profile"><span>◉</span>我的</button>
+  </nav>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

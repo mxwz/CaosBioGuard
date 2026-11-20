@@ -177,26 +177,70 @@
 
 ## 9. APK 实施方案
 
-PySide6 不能直接生成 Android APK。推荐使用 Capacitor 包装现有 PWA。
+PySide6 不能直接生成 Android APK。当前第一版采用 Capacitor 包装现有移动端 Web 页面，通过现有 Flask Web API 完成采集、查询、录入和门禁操作，不在手机端内置厂商原生 SDK。
+
+### 已采用的工程参数
+
+- 应用名称：`CaosBioGuard`
+- 应用包名：`com.mxwz.caosbioguard`
+- Capacitor 工程目录：`mobile/capacitor`
+- Web 资源目录：`mobile/capacitor/www`
+- Android 工程目录：`mobile/capacitor/android`
+- 最低 Android 版本：API 24（Android 7.0）
+- 目标/编译 SDK：API 36
+- 第一版权限：`INTERNET`、`CAMERA`
+- 默认 API 地址：`http://192.168.2.107:6100`，可在应用内“服务器设置”修改
 
 ### 必要环境
 
 - Node.js / npm
-- JDK
-- Android Studio
-- Android SDK
-- Gradle
-- Capacitor
+- JDK 21（Capacitor 8 的 Android 构建要求 source/target 21，JDK 17 会报“无效的源发行版：21”）
+- Android command-line tools
+- Android SDK Platform 36
+- Android SDK Build Tools 36.0.0；首次构建会按工程要求自动补装 Build Tools 35.0.0
+- Platform Tools
+- Gradle Wrapper（无需单独安装 Gradle）
 
-### 实施步骤
+不安装 Android Studio 也可以通过命令行完成 debug APK 构建。
 
-1. 稳定现有 PWA 页面和移动端 API。
-2. 适配移动端布局、摄像头、麦克风、文件上传和权限。
-3. 安装 Capacitor 并创建 Android 工程。
-4. 配置 API 地址、HTTPS、权限和应用图标。
-5. 使用 Android Studio 构建 debug APK。
-6. 真机测试后生成 release APK/AAB。
-7. 再考虑应用市场或内部分发。
+### 命令行构建步骤
+
+在 PowerShell 中进入项目后设置环境变量：
+
+```powershell
+$env:JAVA_HOME = "$env:USERPROFILE\Java\jdk-21.0.13+9"
+$env:ANDROID_HOME = "$env:USERPROFILE\Android\Sdk"
+$env:ANDROID_SDK_ROOT = "$env:USERPROFILE\Android\Sdk"
+```
+
+同步 Web 资源并构建：
+
+```powershell
+Set-Location "mobile\capacitor"
+npm run cap:sync
+Set-Location "android"
+.\gradlew.bat assembleDebug --no-daemon
+```
+
+Gradle 直接产物为：
+
+```text
+mobile/capacitor/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+当前交付副本放在：
+
+```text
+mobile/capacitor/dist/CaosBioGuard-debug.apk
+```
+
+### Debug 包边界
+
+1. debug 包使用调试签名，只能用于内部测试，不能作为正式发布包。
+2. 第一版允许局域网明文 HTTP；公网 release 必须切换 HTTPS，并收紧 cleartext 配置。
+3. 手机端只访问服务端 Web API，百度、腾讯、阿里、华为等端侧 SDK 不包含在该包内。
+4. 摄像头、麦克风、文件采集和门禁操作的真机结果仍需连接可访问的服务器进行验收。
+5. 正式分发前还需要 release 签名密钥、版本号策略、服务器域名、证书和隐私合规复核。
 
 Kivy 或 BeeWare 不能复用现有 PySide6 UI，需要重写，因此仅作为备选，不作为当前推荐路线。
 
