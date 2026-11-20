@@ -8,10 +8,10 @@ https://ai.baidu.com/ai-doc/FACE/Yk37c1opz
 
 百度 Windows C++ SDK 提供人脸检测、跟踪、特征提取、RGB/NIR/深度活体、1:1 比较、1:N 搜索、本地人脸库和用户组管理等能力，核心类为 `BaiduFaceApi`。
 
-本地 Windows C++ SDK 已解压到：
+本地 Windows C++ SDK 已解压到（外部资料统一存放于 `TEMP/`，不入库）：
 
 ```text
-baidu_face_SDK/extracted/Windows_Cpp_8.4/FaceOfflineSdk
+TEMP/baidu_face_SDK/extracted/Windows_Cpp_8.4/FaceOfflineSdk
 ```
 
 关键目录：

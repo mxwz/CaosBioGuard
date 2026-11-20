@@ -20,6 +20,9 @@ dist/
 *.spec.bak
 *.log
 
+# ===== 外部资料 / 临时归集（非项目本体，不入库）=====
+TEMP/
+
 # ===== Capacitor / Android =====
 mobile/capacitor/node_modules/
 mobile/capacitor/android/.gradle/

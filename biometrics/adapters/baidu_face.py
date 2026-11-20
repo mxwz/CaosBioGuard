@@ -16,9 +16,11 @@ from ..types import BioSample, BioTemplate, LivenessReport
 from .base import VendorAdapter
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# 外部厂商 SDK 等非项目本体资料统一放在 TEMP/（不入库）
+EXTERNAL_DIR = Path(os.environ.get('CAOS_EXTERNAL_DIR') or (PROJECT_ROOT / 'TEMP'))
 DEFAULT_WRAPPER = PROJECT_ROOT / 'vendor_wrappers' / 'build' / 'baidu_face' / 'Release' / 'caos_bdface.dll'
-DEFAULT_RUNTIME_DIR = PROJECT_ROOT / 'baidu_face_SDK' / 'extracted' / 'Windows_Cpp_8.4' / 'FaceOfflineSdk' / 'x64'
-DEFAULT_MODEL_PATH = PROJECT_ROOT / 'baidu_face_SDK' / 'extracted' / 'Windows_Cpp_8.4' / 'FaceOfflineSdk' / 'models'
+DEFAULT_RUNTIME_DIR = EXTERNAL_DIR / 'baidu_face_SDK' / 'extracted' / 'Windows_Cpp_8.4' / 'FaceOfflineSdk' / 'x64'
+DEFAULT_MODEL_PATH = EXTERNAL_DIR / 'baidu_face_SDK' / 'extracted' / 'Windows_Cpp_8.4' / 'FaceOfflineSdk' / 'models'
 
 
 class BaiduFaceSDKAdapter(VendorAdapter):
